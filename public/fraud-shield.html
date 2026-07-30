@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Anti-AI Fraud Shield — 가짜는 완벽하지 않습니다</title>
+  <meta name="description" content="AI가 만든 사진에 남는 흔적을 원 단위 비용으로 찾아내는 사전 선별기. 중고거래 플랫폼을 위한 초저비용 위변조 1차 검사 API." />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <nav class="navbar">
+    <span class="brand">🛡️ Anti-AI Fraud Shield</span>
+    <span class="nav-links">
+      <a class="nav-link" href="./detect.html">라이브 데모</a>
+      <a class="nav-link primary" href="#waitlist">얼리엑세스</a>
+    </span>
+  </nav>
+
+  <header class="hero">
+    <p class="eyebrow">AI 위변조 사전 선별 · 원 단위 비용</p>
+    <p class="hero-kicker">FAKES LEAVE <span class="lime">TRACES.</span></p>
+    <h1>가짜는 완벽하지 않습니다.</h1>
+    <p class="subtitle">
+      AI가 만든 사진에는 사람 눈에 안 보이는 흔적이 남습니다. 저희는 사진 전체를 비싼 AI에
+      통째로 넣는 대신, 그 <strong>흔적만 값싸게</strong> 찾아 <strong>"이 사진은 의심스럽다"</strong>는
+      신호를 돌려드립니다. 큰 서버 없이, 지금 이 브라우저에서도 돌아갑니다.
+    </p>
+    <div class="hero-actions">
+      <a class="btn btn-primary" href="./detect.html">사진 한 장 직접 검사해보기 →</a>
+      <a class="btn btn-ghost" href="#waitlist">얼리엑세스 등록</a>
+    </div>
+
+    <!-- 첫 화면 안에 살아있는 제품: 인터랙티브 포렌식 스캐너 -->
+    <div class="hero-demo scanner" id="scanner">
+      <div class="scanner-toolbar">
+        <p class="hd-label">라이브 스캐너 · <b>서버로 아무것도 보내지 않습니다</b></p>
+        <div class="scanner-controls">
+          <div class="seg" role="group" aria-label="샘플 종류">
+            <button class="seg-btn is-active" type="button" data-kind="normal">📷 실제 사진</button>
+            <button class="seg-btn" type="button" data-kind="ai">🤖 AI 생성</button>
+          </div>
+          <button class="btn btn-primary scan-go" id="scan-go" type="button">스캔하기</button>
+        </div>
+      </div>
+
+      <div class="scanner-stage" id="scanner-stage">
+        <canvas id="scanner-canvas" aria-hidden="true"></canvas>
+        <div class="scan-line" id="scan-line"></div>
+        <div class="scan-markers" id="scan-markers"></div>
+        <p class="scan-hint" id="scan-hint">스캔 버튼을 누르면 사진에 남은 흔적을 찾아 표시합니다</p>
+      </div>
+
+      <div class="scanner-checks" id="scanner-checks"></div>
+      <div class="scanner-verdict" id="scanner-verdict" role="status" aria-live="polite" hidden></div>
+
+      <p class="demo-more">다섯 가지 증거를 하나씩 보려면 → <a href="./detect.html">판별 데모 전체 화면</a></p>
+    </div>
+  </header>
+
+  <main>
+    <section class="section">
+      <div class="section-head">
+        <span class="section-num">01 / 문제</span>
+        <h2>사기는 가짜 사진 한 장에서 시작됩니다</h2>
+      </div>
+      <div class="cards">
+        <div class="card">
+          <h3>가짜 매물 사진</h3>
+          <p>세상에 없는 물건을 AI로 그려서 파는 척하는 사기가 늘고 있습니다.</p>
+        </div>
+        <div class="card">
+          <h3>위조 영수증·인증샷</h3>
+          <p>정품 인증서나 결제 영수증도 이미지 생성 도구로 쉽게 그럴듯하게 꾸며집니다.</p>
+        </div>
+        <div class="card">
+          <h3>검사비가 너무 비쌈</h3>
+          <p>기존 방식은 사진 전체를 커다란 AI에 통째로 넣습니다. 정확하지만 한 장당 비용이 커서,
+             하루 수백만 장이 올라오는 앱에는 부담입니다.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-head">
+        <span class="section-num">02 / 차별점</span>
+        <h2>검사를 잘하는 경쟁이 아니라, 검사의 '구조'를 바꿨습니다</h2>
+        <p class="section-lead">
+          사진 전체를 다시 보는 대신, AI가 남기기 쉬운 흔적만 골라 확인합니다.
+          확인할 게 적으니 계산이 가볍고, 값도 쌉니다.
+        </p>
+      </div>
+      <div class="compare-grid">
+        <div class="compare-col compare-old">
+          <h3 class="compare-title">기존 방식</h3>
+          <div class="flow-box">사진 전체를 통째로 분석</div>
+          <div class="flow-arrow" aria-hidden="true">↓</div>
+          <div class="flow-box">커다란 AI 서버 필요 (GPU)</div>
+          <div class="flow-arrow" aria-hidden="true">↓</div>
+          <div class="flow-box flow-result">사진 1장당 수백 원</div>
+        </div>
+        <div class="compare-col compare-new">
+          <h3 class="compare-title">우리 방식</h3>
+          <div class="flow-box">남은 흔적만 골라 확인</div>
+          <div class="flow-arrow" aria-hidden="true">↓</div>
+          <div class="flow-box">가벼운 계산 (일반 CPU·브라우저)</div>
+          <div class="flow-arrow" aria-hidden="true">↓</div>
+          <div class="flow-box flow-result">원 단위 비용</div>
+        </div>
+      </div>
+      <p class="compare-caption">
+        값이 싸지는 게 아니라, <b>비용 구조 자체가 다릅니다.</b>
+      </p>
+    </section>
+
+    <section class="section">
+      <div class="section-head">
+        <span class="section-num">03 / 방법</span>
+        <h2>하나의 점수로 뭉뚱그리지 않습니다</h2>
+        <p class="section-lead">
+          탐정이 지문·필적·잉크를 따로 확인하듯, 다섯 가지 검사가 각각 흔적을 찾고 근거와 함께
+          보여줍니다. 네 가지는 이 브라우저에서 즉시, 하나(Gemini)는 내용까지 정밀하게 봅니다.
+        </p>
+      </div>
+      <div class="evidence-list">
+        <div class="evidence-row">
+          <span class="evidence-idx">01</span>
+          <div class="evidence-body">
+            <h3>촬영 정보(메타데이터) 확인 <span class="evidence-tag">브라우저</span></h3>
+            <p>카메라·촬영 시각 기록이 온전한지, AI 생성 도구가 남긴 흔적은 없는지 봅니다.</p>
+          </div>
+        </div>
+        <div class="evidence-row">
+          <span class="evidence-idx">02</span>
+          <div class="evidence-body">
+            <h3>사진의 결(주파수) 분석 <span class="evidence-tag">브라우저</span></h3>
+            <p>AI 그림에 남기 쉬운 규칙적인 픽셀 무늬를 찾습니다.</p>
+          </div>
+        </div>
+        <div class="evidence-row">
+          <span class="evidence-idx">03</span>
+          <div class="evidence-body">
+            <h3>재압축 오차(ELA) 분석 <span class="evidence-tag">브라우저</span></h3>
+            <p>일부만 합성·편집한 사진은 그 부분만 다르게 어긋납니다.</p>
+          </div>
+        </div>
+        <div class="evidence-row">
+          <span class="evidence-idx">04</span>
+          <div class="evidence-body">
+            <h3>카메라 센서 흔적 분석 <span class="evidence-tag">브라우저</span></h3>
+            <p>진짜 카메라만 남기는 센서·노이즈 특성이 있는지 확인합니다.</p>
+          </div>
+        </div>
+        <div class="evidence-row">
+          <span class="evidence-idx">05</span>
+          <div class="evidence-body">
+            <h3>AI 시각 정밀 분석 (Gemini) <span class="evidence-tag">정밀</span></h3>
+            <p>글자 왜곡, 그림자·원근 모순, 손가락 개수 같은 내용상 이상 징후를 읽습니다.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-head">
+        <span class="section-num">04 / 증명</span>
+        <h2>숫자는 직접 재보세요</h2>
+        <p class="section-lead">
+          "정확도가 얼마나 되나요?"에 말로 답하지 않습니다. 버튼을 누르면 지금 이 브라우저에서
+          샘플 20장(일반 10 · AI 흔적 10)을 만들어 검사하고 결과를 표로 보여드립니다.
+        </p>
+      </div>
+      <button id="bench-btn" class="btn btn-ghost" type="button">지금 이 브라우저에서 직접 측정</button>
+      <p id="bench-progress" class="bench-progress" role="status" aria-live="polite"></p>
+      <div id="bench-result" class="bench-result" hidden>
+        <table class="bench-table">
+          <tbody>
+            <tr><th scope="row">정탐률 (AI 흔적 샘플을 '주의/위험'으로 잡은 비율)</th><td id="bench-tpr">—</td></tr>
+            <tr><th scope="row">오탐률 (일반 샘플을 '주의/위험'으로 잘못 잡은 비율)</th><td id="bench-fpr">—</td></tr>
+            <tr><th scope="row">평균 처리시간 (1장당)</th><td id="bench-time">—</td></tr>
+            <tr><th scope="row">비용</th><td>이 데모 0원 (브라우저) · API 버전 목표 원 단위 (검증 중)</td></tr>
+          </tbody>
+        </table>
+        <p class="note">
+          ※ 이 수치는 브라우저가 만든 합성 샘플 기준입니다. 실제 AI 생성 이미지 벤치마크는
+          검증 중이며, 얼리엑세스 등록자에게 결과를 공개합니다.
+        </p>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-head">
+        <span class="section-num">05 / 요금제</span>
+        <h2>검사한 만큼만 냅니다</h2>
+      </div>
+      <div class="cards">
+        <div class="card">
+          <h3>B2B API 종량제</h3>
+          <p class="price">검사한 만큼만</p>
+          <p>중고거래 플랫폼·본인확인 회사용. 사진 1장 검사할 때마다 조금씩 냅니다.</p>
+        </div>
+        <div class="card">
+          <h3>안심 판매자 구독</h3>
+          <p class="price">월 구독</p>
+          <p>자주 파는 판매자·소상공인용. 매물 사진을 지켜봐 주고 '검증 배지'를 달아드립니다.</p>
+        </div>
+        <div class="card">
+          <h3>웨어러블 보안 SDK</h3>
+          <p class="price">추후 공개</p>
+          <p>AI 안경 같은 기기 제조사에 검사 기능을 통째로 빌려드립니다 (검증 이후 단계).</p>
+        </div>
+      </div>
+      <p class="note">
+        ※ 정확한 가격과 검사 속도는 실제 데이터로 재보는 중입니다. 얼리엑세스 등록자에게
+        측정 결과와 함께 가장 먼저 안내드립니다.
+      </p>
+    </section>
+
+    <section id="waitlist" class="section">
+      <div class="section-head">
+        <span class="section-num">06 / 얼리엑세스</span>
+        <h2>가장 먼저 실측 결과를 받아보세요</h2>
+        <p class="section-lead">
+          중고거래 플랫폼 운영·CS 담당자이거나 전문 중고 판매자이신가요?
+          이메일을 남겨주시면 실측 성능 데이터와 가격 정보를 가장 먼저 보내드립니다.
+        </p>
+      </div>
+      <form id="waitlist-form" class="waitlist-form">
+        <input id="waitlist-email" type="email" placeholder="이메일 주소" required />
+        <button type="submit">대기 등록</button>
+      </form>
+      <p id="waitlist-status" role="status"></p>
+    </section>
+  </main>
+
+  <footer class="footer">
+    Anti-AI Fraud Shield · Yonsei AI Business Lab (Track 03) 프로토타입<br />
+    회원 데모는 <a href="./signup.html">여기</a> · 라이브 판별 데모는 <a href="./detect.html">여기</a>
+  </footer>
+
+  <script type="module" src="./landing.js"></script>
+  <script type="module" src="./scanner.js"></script>
+  <script type="module" src="./motion.js"></script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "static-server",
+      "runtimeExecutable": "C:\\Program Files\\nodejs\\npx.cmd",
+      "runtimeArgs": ["-y", "http-server", "public", "-p", "5173", "-c-1"],
+      "port": 5173
+    }
+  ]
+}

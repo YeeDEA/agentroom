@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>회원가입 데모 | Anti-AI Fraud Shield</title>
+  <style>
+    body { font-family: sans-serif; max-width: 400px; margin: 60px auto; padding: 0 16px; }
+    input { display: block; width: 100%; margin: 8px 0; padding: 8px; box-sizing: border-box; }
+    button { margin: 4px 4px 4px 0; padding: 8px 16px; cursor: pointer; }
+    #status { color: crimson; min-height: 1.5em; }
+  </style>
+</head>
+<body>
+  <h1>Yonsei UX Camp</h1>
+
+  <section id="auth-section">
+    <input id="email" type="email" placeholder="Email" />
+    <input id="password" type="password" placeholder="Password" />
+    <button id="signup-btn">Sign Up</button>
+    <button id="login-btn">Log In</button>
+    <p id="status"></p>
+  </section>
+
+  <section id="app-section" hidden>
+    <p>Logged in as <strong id="user-email"></strong></p>
+    <button id="logout-btn">Log Out</button>
+  </section>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

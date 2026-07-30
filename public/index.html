@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AgentRoom — 팀의 집단지성을 먹고 자라는 AI 워크스페이스</title>
+  <meta name="description" content="디스코드처럼 채널에서 팀과 대화하고, 알에서 깨어나 자라는 AI 에이전트를 함께 키우는 협업 워크스페이스." />
+  <link rel="stylesheet" href="./agentroom.css" />
+</head>
+<body>
+  <!-- ================= 인증 화면 ================= -->
+  <div id="auth-view" class="auth-view">
+   <div class="auth-wrap">
+    <div class="auth-hero">
+      <div class="auth-brand big"><span class="logo-egg">🥚</span> <b>Agent<span class="lime">Room</span></b></div>
+      <h1 class="hero-h1">팀의 집단지성을 <span class="lime">먹고 자라는</span> AI 워크스페이스</h1>
+      <p class="hero-lead">사람마다 흩어진 인사이트를, 대화하며 자라는 팀 전용 AI 에이전트가 기억하고 쌓습니다. 채널에서 함께 키우고, 여러 에이전트를 불러 회의·기획·평가까지 한 방에서.</p>
+      <div class="hero-points">
+        <div class="hp"><b>🧠 집단지성 누적</b><span>대화에서 스스로 학습·기억</span></div>
+        <div class="hp"><b>🤝 멀티 에이전트</b><span>여러 AI가 토론·산출물 생성</span></div>
+        <div class="hp"><b>🥚 육성 게임</b><span>알에서 깨어나 성장하는 재미</span></div>
+      </div>
+    </div>
+    <div class="auth-card">
+      <div class="auth-brand"><span class="logo-egg">🥚</span> <b>Agent<span class="lime">Room</span></b></div>
+      <p class="auth-tag">팀의 집단지성을 먹고 자라는 AI 워크스페이스</p>
+
+      <div class="auth-tabs">
+        <button class="auth-tab is-active" id="tab-login" type="button">로그인</button>
+        <button class="auth-tab" id="tab-signup" type="button">회원가입</button>
+      </div>
+
+      <form id="auth-form" class="auth-form" autocomplete="on">
+        <label class="field" id="name-field" hidden>
+          <span>표시 이름</span>
+          <input id="au-name" type="text" placeholder="예: 용준" maxlength="40" />
+        </label>
+        <label class="field">
+          <span>이메일</span>
+          <input id="au-email" type="email" placeholder="you@example.com" required autocomplete="email" />
+        </label>
+        <label class="field">
+          <span>비밀번호</span>
+          <input id="au-pass" type="password" placeholder="6자 이상" required minlength="6" autocomplete="current-password" />
+        </label>
+        <button class="btn btn-primary btn-block" id="au-submit" type="submit">로그인</button>
+        <p class="auth-msg" id="auth-msg" role="status"></p>
+      </form>
+      <p class="auth-hint">데모용 프로토타입 · Firebase Auth(이메일/비밀번호)</p>
+    </div>
+   </div>
+  </div>
+
+  <!-- ================= 메인 앱 ================= -->
+  <div id="app-view" class="app-view" hidden>
+    <!-- 워크스페이스 레일 -->
+    <aside class="ws-rail" id="ws-rail"></aside>
+
+    <!-- 사이드바: 채널 + 에이전트 -->
+    <nav class="sidebar" id="sidebar">
+      <div class="ws-head">
+        <div class="ws-head-name" id="ws-name">워크스페이스</div>
+        <button class="icon-btn" id="ws-invite-btn" title="초대 / 워크스페이스 ID">👥</button>
+      </div>
+
+      <div class="side-section">
+        <div class="side-title">
+          <span>채널</span>
+          <button class="mini-add" id="add-channel-btn" title="채널 추가">＋</button>
+        </div>
+        <ul class="channel-list" id="channel-list"></ul>
+      </div>
+
+      <div class="side-section">
+        <div class="side-title">
+          <span>에이전트</span>
+          <button class="mini-add" id="add-agent-btn" title="에이전트 추가">＋</button>
+        </div>
+        <ul class="agent-list" id="agent-list"></ul>
+      </div>
+
+      <div class="side-foot">
+        <button class="me-chip" id="me-chip" title="내 프로필 (아바타·닉네임)">
+          <span class="me-ava" id="me-ava">?</span>
+          <span class="me-email" id="me-email"></span>
+        </button>
+        <button class="icon-btn" id="logout-btn" title="로그아웃">⎋</button>
+      </div>
+    </nav>
+
+    <!-- 채팅 -->
+    <main class="chat">
+      <header class="chat-head">
+        <div class="chat-title" id="chat-title"># 채널을 선택하세요</div>
+        <label class="auto-toggle" id="auto-toggle-wrap" hidden title="켜면 @멘션 없이도, 질문(?)에 채널 대표 에이전트가 자율로 답합니다">
+          <input type="checkbox" id="auto-toggle" /> 자율개입
+        </label>
+        <button class="head-btn" id="summarize-btn" hidden title="긴 대화를 핵심/쟁점으로 압축한 카드를 채널에 남깁니다">🧵 대화 요약</button>
+        <button class="head-btn" id="export-btn" hidden title="이 채널의 대화·산출물을 파일로 내보내기">⤓ 내보내기</button>
+        <div class="chat-agents" id="chat-agents"></div>
+      </header>
+      <div class="messages" id="messages"></div>
+      <div class="cmd-palette" id="cmd-palette" hidden></div>
+      <form class="composer" id="composer">
+        <button class="attach-btn" id="attach-btn" type="button" title="이미지 첨부 (자동 압축)">📎</button>
+        <input id="attach-input" type="file" accept="image/*" hidden />
+        <textarea id="composer-input" rows="1" placeholder="메시지 입력…  에이전트를 부르려면 @이름" autocomplete="off"></textarea>
+        <button class="btn btn-primary" id="composer-send" type="submit">보내기</button>
+      </form>
+      <p class="composer-hint" id="composer-hint"><b>@멘션</b>하면 팀이 쌓아온 지식으로 답합니다 · 👍로 성장을 도와주세요<span style="opacity:.5"> · type <code>/</code> for commands (help·plan·pitch·swot·viz…)</span></p>
+    </main>
+
+    <!-- 에이전트 성장 패널 -->
+    <aside class="agent-panel" id="agent-panel">
+      <div class="panel-empty" id="panel-empty">
+        <p>왼쪽에서 에이전트를 선택하면<br />성장 상태가 여기에 보여요.</p>
+      </div>
+      <div class="panel-body" id="panel-body" hidden>
+        <div class="pet-stage" id="pet-stage">
+          <canvas class="pet-canvas" id="pet-canvas" width="32" height="32"></canvas>
+          <div class="pet-bubbles" id="pet-bubbles"></div>
+        </div>
+        <div class="pet-name" id="pet-name"></div>
+        <div class="pet-level" id="pet-level"></div>
+        <div class="exp-wrap"><div class="exp-bar" id="exp-bar"></div></div>
+        <div class="exp-text" id="exp-text"></div>
+        <p class="pet-blurb" id="pet-blurb"></p>
+        <div class="pet-actions" id="pet-actions"></div>
+        <div class="pet-stats" id="pet-stats"></div>
+        <div class="mem-head">🧠 학습한 지식 <span id="mem-count">0</span></div>
+        <ul class="mem-list" id="mem-list"></ul>
+      </div>
+    </aside>
+  </div>
+
+  <!-- 모달 -->
+  <div class="modal-backdrop" id="modal-backdrop" hidden>
+    <div class="modal" id="modal"></div>
+  </div>
+
+  <!-- 토스트 -->
+  <div class="toaster" id="toaster"></div>
+
+  <script type="module" src="./ar-app.js"></script>
+</body>
+</html>

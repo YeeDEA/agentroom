@@ -579,10 +579,13 @@ function msgHtml(m) {
   const praise = isAgent && m.agentId
     ? `<div class="msg-actions"><button class="praise-btn" data-msg="${m.id}" data-agent="${m.agentId}">👍 도움이 됐어요${m.reactions ? " · " + m.reactions : ""}</button></div>`
     : "";
-  // 본인 메시지 + 보낸 지 5분 이내면 호버 시 삭제 버튼
+  // 호버 툴바: 복사(모든 메시지) + 삭제(내 메시지, 보낸 지 5분 이내)
   const ageMs = m.createdAt && m.createdAt.seconds ? Date.now() - m.createdAt.seconds * 1000 : 0;
-  const del = mine && ageMs < 5 * 60 * 1000
-    ? `<button class="msg-del" data-msg="${m.id}" title="내 메시지 삭제 (5분 이내만)">🗑</button>` : "";
+  const canDel = mine && ageMs < 5 * 60 * 1000;
+  const del = `<div class="msg-tools">` +
+    (m.content ? `<button class="msg-tool msg-copy" data-msg="${m.id}" title="내용 복사">📋</button>` : "") +
+    (canDel ? `<button class="msg-tool msg-del" data-msg="${m.id}" title="내 메시지 삭제 (5분 이내만)">🗑</button>` : "") +
+    `</div>`;
   const img = m.image ? `<img class="msg-img" src="${esc(m.image)}" alt="첨부 이미지" loading="lazy">` : "";
   // 🧠 근거 각주: 에이전트가 실제로 활용한 팀 학습 지식 표시 (신뢰 + "진짜 기억한다" 증명)
   const srcs = isAgent && Array.isArray(m.sources) && m.sources.length
@@ -607,8 +610,25 @@ function agentLevel(agentId) {
   return a ? a.level : 1;
 }
 
-// 👍 / 🗑 이벤트 위임
+// 👍 / 📋 / 🗑 이벤트 위임
 $("messages").addEventListener("click", async (e) => {
+  // 메시지 내용 복사
+  const copyBtn = e.target.closest(".msg-copy");
+  if (copyBtn) {
+    const msg = state.messages.find((x) => x.id === copyBtn.dataset.msg);
+    const text = msg ? msg.content : "";
+    try { await navigator.clipboard.writeText(text); }
+    catch (_) {
+      const ta = document.createElement("textarea");
+      ta.value = text; document.body.appendChild(ta); ta.select();
+      try { document.execCommand("copy"); } catch (_) {}
+      ta.remove();
+    }
+    copyBtn.textContent = "✓";
+    setTimeout(() => { if (copyBtn.isConnected) copyBtn.textContent = "📋"; }, 1200);
+    toast("메시지를 복사했어요.");
+    return;
+  }
   // 내 메시지 삭제 (2단계 확인)
   const delBtn = e.target.closest(".msg-del");
   if (delBtn) {
@@ -639,20 +659,73 @@ input.addEventListener("input", () => {
   input.style.height = "auto";
   input.style.height = Math.min(160, input.scrollHeight) + "px";
   updateCmdPalette();
+  updateMentionPalette();
 });
+// 팔레트 공용 키보드 내비 (↑↓ 이동, Tab/Enter 선택, Esc 닫기)
+function paletteNav(pal, e, enterSelects) {
+  const items = [...pal.querySelectorAll(".cmd-item")];
+  let idx = items.findIndex((x) => x.classList.contains("active"));
+  if (e.key === "ArrowDown") { e.preventDefault(); idx = Math.min(items.length - 1, idx + 1); items.forEach((x, i) => x.classList.toggle("active", i === idx)); return true; }
+  if (e.key === "ArrowUp") { e.preventDefault(); idx = Math.max(0, idx - 1); items.forEach((x, i) => x.classList.toggle("active", i === idx)); return true; }
+  if ((e.key === "Tab" || (enterSelects && e.key === "Enter")) && idx >= 0) { e.preventDefault(); items[idx].click(); return true; }
+  if (e.key === "Escape") { pal.hidden = true; return true; }
+  return false;
+}
 input.addEventListener("keydown", (e) => {
+  const mpal = $("mention-palette");
+  if (mpal && !mpal.hidden && paletteNav(mpal, e, true)) return; // 멘션: Enter=선택 (전송 아님)
   const pal = $("cmd-palette");
-  if (pal && !pal.hidden) {
-    const items = [...pal.querySelectorAll(".cmd-item")];
-    let idx = items.findIndex((x) => x.classList.contains("active"));
-    if (e.key === "ArrowDown") { e.preventDefault(); idx = Math.min(items.length - 1, idx + 1); items.forEach((x, i) => x.classList.toggle("active", i === idx)); return; }
-    if (e.key === "ArrowUp") { e.preventDefault(); idx = Math.max(0, idx - 1); items.forEach((x, i) => x.classList.toggle("active", i === idx)); return; }
-    if (e.key === "Tab" && idx >= 0) { e.preventDefault(); items[idx].click(); return; }
-    if (e.key === "Escape") { pal.hidden = true; return; }
-  }
+  if (pal && !pal.hidden && paletteNav(pal, e, false)) return;
   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("composer").requestSubmit(); }
 });
-input.addEventListener("blur", () => setTimeout(() => { const p = $("cmd-palette"); if (p) p.hidden = true; }, 160));
+input.addEventListener("blur", () => setTimeout(() => {
+  const p = $("cmd-palette"); if (p) p.hidden = true;
+  const mp = $("mention-palette"); if (mp) mp.hidden = true;
+}, 160));
+
+// ======================= @ 멘션 자동완성 =======================
+function mentionCandidates() {
+  const ags = channelAgents().map((a) => ({ type: "agent", name: a.name, level: a.level, hue: a.hue ?? hueFrom(a.name) }));
+  // 사람: 방 프로필 닉네임 + 이 채널 대화에 등장한 사용자
+  const humans = new Set();
+  Object.values(state.roomProfiles).forEach((p) => { if (p && p.displayName) humans.add(p.displayName); });
+  state.messages.forEach((m) => { if (m.senderType === "user" && m.senderName) humans.add(nameFor(m.senderId, m.senderName)); });
+  const agNames = new Set(ags.map((a) => a.name));
+  return [...ags, ...[...humans].filter((n) => !agNames.has(n)).map((n) => ({ type: "user", name: n }))];
+}
+
+function updateMentionPalette() {
+  const pal = $("mention-palette");
+  if (!pal) return;
+  if (!state.currentChId) { pal.hidden = true; return; }
+  const pos = input.selectionStart ?? input.value.length;
+  const before = input.value.slice(0, pos);
+  const m = before.match(/@([^\s@]*)$/);
+  if (!m) { pal.hidden = true; return; }
+  const q = m[1].toLowerCase();
+  const cands = mentionCandidates().filter((c) => !q || c.name.toLowerCase().includes(q)).slice(0, 8);
+  if (!cands.length) { pal.hidden = true; return; }
+  pal.innerHTML = cands.map((c, i) =>
+    `<div class="cmd-item${i === 0 ? " active" : ""}" data-name="${esc(c.name)}">` +
+    (c.type === "agent"
+      ? `<canvas class="mention-ava" width="32" height="32" data-hue="${c.hue}" data-level="${c.level}"></canvas>`
+      : `<span class="mention-user-dot">${esc(firstGrapheme(c.name).toUpperCase())}</span>`) +
+    `<code>@${esc(c.name)}</code><span>${c.type === "agent" ? "AI 에이전트 · 부르면 답해요" : "팀원"}</span></div>`
+  ).join("");
+  pal.hidden = false;
+  pal.querySelectorAll("canvas[data-hue]").forEach((cv) => drawPet(cv, +cv.dataset.level || 1, +cv.dataset.hue || 265));
+  pal.querySelectorAll(".cmd-item").forEach((el) => el.onclick = () => applyMention(el.dataset.name));
+}
+
+function applyMention(name) {
+  const pos = input.selectionStart ?? input.value.length;
+  const before = input.value.slice(0, pos).replace(/@[^\s@]*$/, "@" + name + " ");
+  input.value = before + input.value.slice(pos);
+  $("mention-palette").hidden = true;
+  input.focus();
+  input.setSelectionRange(before.length, before.length);
+  input.style.height = "auto"; input.style.height = Math.min(160, input.scrollHeight) + "px";
+}
 
 // 📎 이미지 첨부 — 클라이언트에서 압축(최대 800px JPEG) 후 인라인 저장 (Storage 없이, 데모용)
 async function compressImage(file) {

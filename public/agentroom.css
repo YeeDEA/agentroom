@@ -212,12 +212,20 @@ button { font-family: inherit; }
 
 .messages { flex: 1; overflow-y: auto; padding: 18px 20px 8px; display: flex; flex-direction: column; gap: 14px; }
 .msg { display: flex; gap: 12px; position: relative; }
-/* 내 메시지 삭제(5분 내) — 호버 시에만 표시 */
-.msg .msg-del { position: absolute; right: 4px; top: 0; opacity: 0; background: var(--bg-3);
-  border: 1px solid var(--line); color: var(--txt-dim); border-radius: 8px; padding: 2px 8px;
-  font-size: 12px; cursor: pointer; transition: opacity .12s; }
-.msg:hover .msg-del { opacity: 1; }
-.msg .msg-del:hover { border-color: var(--danger); color: var(--danger); }
+/* 메시지 호버 툴바 — 📋 복사(항상) + 🗑 삭제(내 메시지 5분 내) */
+.msg .msg-tools { position: absolute; right: 4px; top: -6px; display: flex; gap: 4px;
+  opacity: 0; transition: opacity .12s; background: var(--bg-2); border: 1px solid var(--line);
+  border-radius: 10px; padding: 2px; }
+.msg:hover .msg-tools { opacity: 1; }
+.msg-tool { background: transparent; border: 0; color: var(--txt-dim); border-radius: 8px;
+  padding: 3px 8px; font-size: 12px; cursor: pointer; line-height: 1.2; }
+.msg-tool:hover { background: var(--bg-4); color: var(--txt); }
+.msg-tool.msg-del:hover { color: var(--danger); }
+/* @멘션 자동완성 아이템 */
+.mention-ava { width: 24px; height: 24px; image-rendering: pixelated; flex: 0 0 auto; }
+.mention-user-dot { width: 24px; height: 24px; border-radius: 8px; background: linear-gradient(135deg,#4a4370,#332e58);
+  color: #fff; display: grid; place-items: center; font-size: 11px; font-weight: 700; flex: 0 0 auto; }
+#mention-palette .cmd-item { align-items: center; }
 /* 첨부 이미지 */
 .msg-img { display: block; max-width: 320px; max-height: 260px; border-radius: 10px;
   border: 1px solid var(--line); margin-top: 6px; }

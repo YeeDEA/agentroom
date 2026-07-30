@@ -221,6 +221,10 @@ button { font-family: inherit; }
 /* 첨부 이미지 */
 .msg-img { display: block; max-width: 320px; max-height: 260px; border-radius: 10px;
   border: 1px solid var(--line); margin-top: 6px; }
+/* 🧠 근거 각주 — 에이전트가 활용한 팀 학습 지식 */
+.msg-sources { margin-top: 5px; font-size: 11px; color: var(--txt-mute); line-height: 1.5; }
+.msg-sources span { background: rgba(139,124,246,.10); border: 1px solid var(--line);
+  border-radius: 6px; padding: 1px 6px; color: var(--txt-dim); }
 /* 첨부 버튼 */
 .attach-btn { align-self: flex-end; background: var(--bg-3); border: 1px solid var(--line); color: var(--txt-dim);
   border-radius: 10px; padding: 10px 12px; font-size: 16px; cursor: pointer; line-height: 1.2; }

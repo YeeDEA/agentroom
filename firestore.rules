@@ -118,7 +118,10 @@ service cloud.firestore {
           allow create: if isWsMember(wsId) &&
             request.resource.data.content is string &&
             request.resource.data.content.size() <= 8000 &&
-            request.resource.data.senderType in ['user', 'agent', 'system'];
+            request.resource.data.senderType in ['user', 'agent', 'system'] &&
+            // 사람 메시지는 본인 uid로만 (발신자 사칭 방지)
+            (request.resource.data.senderType != 'user' ||
+              request.resource.data.senderId == uid());
           // 좋아요(reactions) 등 소소한 갱신 허용
           allow update: if isWsMember(wsId);
           allow delete: if isWsMember(wsId);

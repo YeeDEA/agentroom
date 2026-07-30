@@ -150,6 +150,66 @@ function openProfileModal() {
   };
 }
 
+// ======================= ⚙️ 두뇌 설정 (Gemini ↔ Hermes, BYOK) =======================
+$("brain-btn").onclick = openBrainModal;
+function openBrainModal() {
+  const cfg = ai.getBrainConfig();
+  const isH = cfg.provider === "hermes";
+  openModal(`
+    <h3>⚙️ 두뇌 설정</h3>
+    <p class="sub">에이전트들의 두뇌(LLM)를 고릅니다. 현재: <b>${esc(ai.brainLabel())}</b></p>
+    <div class="field"><span>프로바이더</span>
+      <select id="br-provider">
+        <option value="gemini"${isH ? "" : " selected"}>Gemini (기본 · Firebase 내장, 키 불필요)</option>
+        <option value="hermes"${isH ? " selected" : ""}>Hermes (오픈모델 · 외부 API, 내 키 사용)</option>
+      </select></div>
+    <div id="br-hermes" ${isH ? "" : "hidden"}>
+      <div class="field"><span>API 엔드포인트 (OpenAI 호환)</span>
+        <input id="br-endpoint" value="${esc(cfg.endpoint || ai.HERMES_DEFAULTS.endpoint)}" placeholder="${esc(ai.HERMES_DEFAULTS.endpoint)}" /></div>
+      <div class="field"><span>모델 ID</span>
+        <input id="br-model" value="${esc(cfg.model || ai.HERMES_DEFAULTS.model)}" placeholder="${esc(ai.HERMES_DEFAULTS.model)}" /></div>
+      <div class="field"><span>API 키 (OpenRouter·Together 등에서 발급)</span>
+        <input id="br-key" type="password" value="${esc(cfg.apiKey || "")}" placeholder="sk-or-..." autocomplete="off" /></div>
+      <p class="sub" style="margin:0 0 12px">🔐 키는 <b>이 브라우저(localStorage)에만</b> 저장되고 서버로 전송되지 않아요. 연산은 전부 외부 API에서 처리됩니다. Hermes 호출이 실패하면 자동으로 Gemini로 폴백합니다. (정식 인프라가 생기면 키를 서버 프록시로 옮기는 걸 권장)</p>
+    </div>
+    <p class="sub" id="br-test-result" style="min-height:1.2em"></p>
+    <div class="modal-actions">
+      <button class="btn" id="br-cancel">취소</button>
+      <button class="btn" id="br-test">연결 테스트</button>
+      <button class="btn btn-primary" id="br-save">저장</button>
+    </div>`);
+  $("br-provider").onchange = () => { $("br-hermes").hidden = $("br-provider").value !== "hermes"; };
+  const readCfg = () => {
+    const provider = $("br-provider").value;
+    if (provider !== "hermes") return { provider: "gemini" };
+    return {
+      provider: "hermes",
+      endpoint: $("br-endpoint").value.trim() || ai.HERMES_DEFAULTS.endpoint,
+      model: $("br-model").value.trim() || ai.HERMES_DEFAULTS.model,
+      apiKey: $("br-key").value.trim(),
+    };
+  };
+  $("br-cancel").onclick = closeModal;
+  $("br-test").onclick = async () => {
+    const el = $("br-test-result");
+    const cur = readCfg();
+    if (cur.provider === "hermes" && !cur.apiKey) { el.textContent = "⚠️ Hermes를 쓰려면 API 키가 필요해요."; return; }
+    ai.setBrainConfig(cur);
+    el.textContent = "테스트 중…";
+    $("br-test").disabled = true;
+    try { const r = await ai.testBrain(); el.textContent = `✅ 연결 성공 (${r.ms}ms) — "${r.reply}"`; }
+    catch (e) { el.textContent = "❌ 실패: " + (e.message || e).slice(0, 120); }
+    finally { $("br-test").disabled = false; }
+  };
+  $("br-save").onclick = () => {
+    const cur = readCfg();
+    if (cur.provider === "hermes" && !cur.apiKey) { $("br-test-result").textContent = "⚠️ Hermes를 쓰려면 API 키가 필요해요."; return; }
+    ai.setBrainConfig(cur);
+    closeModal();
+    toast("두뇌 설정 저장: " + ai.brainLabel());
+  };
+}
+
 onAuthStateChanged(auth, async (user) => {
   teardownAll();
   state.user = user;
@@ -327,8 +387,10 @@ function renderAgents() {
     const li = document.createElement("li");
     li.className = "empty-hint";
     li.style.margin = "8px";
-    li.innerHTML = "아직 에이전트가 없어요.<br>＋로 첫 에이전트를 만들어보세요 🥚";
+    li.innerHTML = `아직 에이전트가 없어요.<br>＋로 만들거나, 한 번에 시작하세요.<br><button class="btn btn-primary" id="sample-team-btn" style="margin-top:10px;font-size:13px">🎁 샘플 팀 불러오기</button>`;
     ul.appendChild(li);
+    const btn = li.querySelector("#sample-team-btn");
+    if (btn) btn.onclick = seedSampleTeam;
     return;
   }
   for (const a of state.agents) {
@@ -341,6 +403,28 @@ function renderAgents() {
     li.onclick = () => selectAgent(a.id);
     ul.appendChild(li);
   }
+}
+
+// 🎁 1클릭 샘플 팀 — 빈 워크스페이스 콜드스타트 해소
+async function seedSampleTeam() {
+  if (!state.currentWsId) return;
+  const btn = $("sample-team-btn");
+  if (btn) { btn.disabled = true; btn.textContent = "불러오는 중…"; }
+  try {
+    const presets = [
+      { name: "기획봇", hue: 265, tone: "논리적이고 명확하게", verbosity: "보통",
+        persona: "너는 제품 전략가(PM)야. 문제 정의와 타깃, 핵심 가치에 집중하고 아이디어를 실행 범위로 좁혀." },
+      { name: "마케터", hue: 150, tone: "에너지 넘치고 실행 중심", verbosity: "보통",
+        persona: "너는 그로스 마케터야. 저비용 고객 획득과 바이럴에 밝고, 항상 구체적 채널·액션·지표를 제시해." },
+      { name: "재무봇", hue: 30, tone: "냉정하고 분석적으로, 숫자 중심", verbosity: "간결",
+        persona: "너는 재무 전문가야. 유닛 이코노믹스와 수익모델에 밝고 숫자엔 늘 근거를 붙여." },
+    ];
+    for (const p of presets) {
+      const id = await store.createAgent(state.currentWsId, state.user.uid, p);
+      if (state.currentChId) await store.addAgentToChannel(state.currentWsId, state.currentChId, id);
+    }
+    toast("🎁 샘플 팀 3인이 도착했어요! @기획봇 하고 말을 걸어보세요.");
+  } catch (err) { toast("불러오기 실패: " + (err.message || err)); if (btn) { btn.disabled = false; btn.textContent = "🎁 샘플 팀 불러오기"; } }
 }
 
 function selectAgent(agentId) {
@@ -500,9 +584,12 @@ function msgHtml(m) {
   const del = mine && ageMs < 5 * 60 * 1000
     ? `<button class="msg-del" data-msg="${m.id}" title="내 메시지 삭제 (5분 이내만)">🗑</button>` : "";
   const img = m.image ? `<img class="msg-img" src="${esc(m.image)}" alt="첨부 이미지" loading="lazy">` : "";
+  // 🧠 근거 각주: 에이전트가 실제로 활용한 팀 학습 지식 표시 (신뢰 + "진짜 기억한다" 증명)
+  const srcs = isAgent && Array.isArray(m.sources) && m.sources.length
+    ? `<div class="msg-sources">🧠 근거: ${m.sources.map((s) => `<span>${esc(s)}</span>`).join(" · ")}</div>` : "";
   return `<div class="msg${mine ? " mine" : ""}">${ava}<div class="msg-body">
     <div class="msg-top"><span class="msg-name ${isAgent ? "agent" : ""}${mine ? " me" : ""}">${esc(dispName)}</span>${badge}<span class="msg-time">${fmtTime(m.createdAt)}</span></div>
-    ${m.content ? `<div class="msg-text">${highlightMentions(m.content)}</div>` : ""}${img}${praise}</div>${del}</div>`;
+    ${m.content ? `<div class="msg-text">${highlightMentions(m.content)}</div>` : ""}${img}${srcs}${praise}</div>${del}</div>`;
 }
 
 function thinkingHtml(p) {
@@ -647,9 +734,31 @@ const COMMANDS = [
   { name: "canvas", aliases: ["캔버스", "lean"], arg: true, tag: "synth", usage: "/canvas <idea>", desc: "lean canvas · 린 캔버스", run: (a) => produceDoc("🧩", `"${a}"의 린 캔버스를 작성하라. 참고:\n${ctxRecent()}\nsection: "문제","고객군","가치 제안","솔루션","수익 모델","핵심 지표","차별적 우위","비용 구조". 각 items 1~3개.`, "🧩 린 캔버스를 채우는 중…") },
   // 시각화
   { name: "viz", aliases: ["시각화", "diagram", "chart", "graph"], arg: true, usage: "/viz <topic>", desc: "diagram · 다이어그램으로 시각화", run: runVisualize },
+  // 결정 타임라인 (AI 불필요 — 회의결론·결정 카드를 시간순으로 모아봄)
+  { name: "decisions", aliases: ["결정로그", "결정모음", "timeline", "log"], usage: "/decisions", desc: "decision log · 이 채널의 결정 모아보기", run: runDecisionLog },
   // 내보내기
   { name: "export", aliases: ["내보내기", "저장", "download", "dl"], usage: "/export [md|html|json|csv|txt]", desc: "channel to file · 대화·산출물 내보내기", run: (a) => { const k = (a || "").trim().toLowerCase(); if (exporter.FORMATS[k]) doExport(k); else openExportModal(); } },
 ];
+
+// 결정 타임라인 — 팀 기억의 본질은 "우리가 뭘 결정했나"
+async function runDecisionLog() {
+  const found = [];
+  for (const m of state.messages) {
+    let d; try { d = JSON.parse(m.content); } catch (_) { continue; }
+    const when = m.createdAt && m.createdAt.seconds ? new Date(m.createdAt.seconds * 1000).toLocaleDateString("ko-KR", { month: "numeric", day: "numeric" }) : "";
+    if (m.kind === "meeting" && Array.isArray(d.points)) {
+      d.points.forEach((p) => found.push(`[${when}] ${p}`));
+    } else if (m.kind === "doc" && d.emoji === "✅" && Array.isArray(d.sections)) {
+      const rec = d.sections.find((s) => (s.heading || "").includes("추천 결정"));
+      (rec?.items || []).forEach((p) => found.push(`[${when}] ${p}`));
+    }
+  }
+  if (!found.length) { toast("아직 이 채널에 기록된 결정이 없어요. /discuss 나 /decide 로 결정을 만들어 보세요."); return; }
+  await store.addDocCard(state.currentWsId, state.currentChId, {
+    emoji: "🗂️", title: "결정 타임라인 — 이 채널이 확정한 것들",
+    sections: [{ heading: `총 ${found.length}건 (시간순)`, items: found.slice(-14) }],
+  });
+}
 
 function parseCommand(text) {
   const m = text.match(/^\/([^\s]+)(?:\s+([\s\S]+))?$/);
@@ -690,7 +799,8 @@ async function agentSpeak(agent, userText, awardAnswer = true) {
     const memories = await store.fetchTopMemories(wsId, agent.id, 4);
     const recent = state.messages.slice(-8).map((m) => ({ senderName: m.senderName, content: m.content }));
     res = await ai.respond({ agent, memories, recent, userName: meName(), userText, levelName: levelInfo(agent.level).name });
-    await store.sendMessage(wsId, chId, { senderId: agent.id, senderType: "agent", senderName: agent.name, content: res.reply, agentId: agent.id });
+    await store.sendMessage(wsId, chId, { senderId: agent.id, senderType: "agent", senderName: agent.name, content: res.reply, agentId: agent.id,
+      sources: (res.sources || []).map((n) => String(memories[n - 1] || "").slice(0, 70)).filter(Boolean) });
     if (res.ok && awardAnswer) await awardExp(agent.id, EXP.ANSWER, 0, 1);
   } catch (err) { console.error(err); }
   finally { state.pending = state.pending.filter((p) => p.id !== agent.id); renderMessages(); }
@@ -806,6 +916,7 @@ async function triggerAgent(agent, userText) {
     await store.sendMessage(wsId, chId, {
       senderId: agent.id, senderType: "agent", senderName: agent.name,
       content: res.reply, agentId: agent.id,
+      sources: (res.sources || []).map((n) => String(memories[n - 1] || "").slice(0, 70)).filter(Boolean),
     });
     if (res.ok) {
       let learnedDelta = 0;
@@ -850,6 +961,7 @@ async function runRoundtable(participants, topic, userText) {
       });
       await store.sendMessage(wsId, chId, {
         senderId: agent.id, senderType: "agent", senderName: agent.name, content: res.reply, agentId: agent.id,
+        sources: (res.sources || []).map((n) => String(memories[n - 1] || "").slice(0, 70)).filter(Boolean),
       });
       soFar.push({ name: agent.name, content: res.reply });
       if (res.ok) {

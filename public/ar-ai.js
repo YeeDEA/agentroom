@@ -41,6 +41,97 @@ function parseJson(text) {
   return null;
 }
 
+// ================= 두뇌 프로바이더 계층 (Gemini ↔ Hermes) =================
+// 인프라(프록시 서버)가 아직 없으므로 BYOK(Bring Your Own Key) 방식:
+// 사용자가 ⚙️ 두뇌 설정에서 자기 API 키를 넣으면 이 브라우저(localStorage)에만 저장되고,
+// OpenRouter 등 OpenAI 호환 API로 직접 호출한다(연산은 전부 외부에서 처리).
+// Hermes 실패 시 Gemini로 자동 폴백 → 데모가 중간에 죽지 않는다.
+const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
+const DEFAULT_HERMES_MODEL = "nousresearch/hermes-3-llama-3.1-70b";
+const BRAIN_KEY = "agentroom_brain_v1";
+
+export function getBrainConfig() {
+  try {
+    const c = JSON.parse(localStorage.getItem(BRAIN_KEY) || "null");
+    return c && c.provider ? c : { provider: "gemini" };
+  } catch (_) { return { provider: "gemini" }; }
+}
+export function setBrainConfig(cfg) {
+  try { localStorage.setItem(BRAIN_KEY, JSON.stringify(cfg || { provider: "gemini" })); } catch (_) {}
+}
+export function brainLabel() {
+  const c = getBrainConfig();
+  return c.provider === "hermes" ? `Hermes · ${c.model || DEFAULT_HERMES_MODEL}` : "Gemini (기본)";
+}
+export const HERMES_DEFAULTS = { endpoint: OPENROUTER_URL, model: DEFAULT_HERMES_MODEL };
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Gemini 경로 — 429(무료 쿼터)면 자동 재시도(최대 2회, 백오프)
+async function callGemini(prompt) {
+  const m = model();
+  if (!m) throw new Error("Gemini 미연결");
+  let lastErr;
+  for (let i = 0; i < 3; i++) {
+    try {
+      const res = await withTimeout(m.generateContent(prompt), TIMEOUT_MS);
+      return res.response.text();
+    } catch (e) {
+      lastErr = e;
+      if (e && e.isTimeout) throw e;
+      if (isQuotaError(e) && i < 2) { await sleep(2800 + i * 4000); continue; }
+      throw e;
+    }
+  }
+  throw lastErr;
+}
+
+// Hermes 경로 — OpenAI 호환 chat/completions (OpenRouter·Together 등)
+async function callHermes(cfg, prompt, useJsonFormat = true) {
+  const body = {
+    model: cfg.model || DEFAULT_HERMES_MODEL,
+    messages: [{ role: "user", content: prompt }],
+    temperature: 0.8,
+  };
+  if (useJsonFormat) body.response_format = { type: "json_object" };
+  const res = await withTimeout(fetch(cfg.endpoint || OPENROUTER_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": "Bearer " + cfg.apiKey },
+    body: JSON.stringify(body),
+  }), TIMEOUT_MS);
+  if (res.status === 400 && useJsonFormat) return callHermes(cfg, prompt, false); // response_format 미지원 모델 폴백
+  if (!res.ok) {
+    const t = await res.text().catch(() => "");
+    throw new Error(`Hermes HTTP ${res.status} ${t.slice(0, 160)}`);
+  }
+  const data = await res.json();
+  const out = data.choices && data.choices[0] && data.choices[0].message ? data.choices[0].message.content : "";
+  if (!out) throw new Error("Hermes 빈 응답");
+  return out;
+}
+
+// 통합 진입점 — 모든 AI 기능이 이 함수만 호출한다
+async function callLLM(prompt) {
+  const cfg = getBrainConfig();
+  if (cfg.provider === "hermes" && cfg.apiKey) {
+    try { return await callHermes(cfg, prompt); }
+    catch (e) {
+      console.warn("[AgentRoom] Hermes 실패 → Gemini 폴백:", e.message);
+      try { return await callGemini(prompt); }
+      catch (e2) { throw (isQuotaError(e2) ? e2 : e); }
+    }
+  }
+  return callGemini(prompt);
+}
+
+// ⚙️ 두뇌 설정 모달의 연결 테스트
+export async function testBrain() {
+  const t0 = performance.now();
+  const text = await callLLM('아래 STRICT JSON만 출력하라(코드펜스 금지): {"ok": true, "hello": "짧은 한국어 인사 한 문장"}');
+  const p = parseJson(text);
+  return { ms: Math.round(performance.now() - t0), reply: (p && p.hello) ? p.hello : String(text).slice(0, 80) };
+}
+
 function buildPrompt({ agent, memories, recent, userName, userText, levelName, meeting }) {
   const mem = memories.length
     ? memories.map((m, i) => `  ${i + 1}. ${m}`).join("\n")
@@ -89,13 +180,14 @@ ${userText}
 - 팀원에게 도움이 되도록 한국어로 자연스럽고 간결하게(2~5문장) 답하라. 필요하면 목록을 써도 된다.
 - 위 "학습한 지식"과 관련 있으면 적극 활용하라(팀의 집단지성을 반영).
 - 이번 대화에서 앞으로 계속 기억할 가치가 있는 사실/결정/선호/맥락을 하나 배웠다면 "learned"에 한국어 한 줄로 요약하라. 인사·잡담처럼 기억할 가치가 없으면 learned는 null로 둬라(아무거나 지어내지 마라).
+- 답변에 위 "학습한 지식"을 실제로 활용했다면 그 번호들을 "sources"에 담아라(활용 안 했으면 빈 배열, 최대 3개).
 
 반드시 아래 STRICT JSON만 출력하라(코드펜스·설명 금지):
-{"reply": "채널에 올릴 답변(한국어)", "learned": "기억할 지식 한 줄(한국어) 또는 null"}`;
+{"reply": "채널에 올릴 답변(한국어)", "learned": "기억할 지식 한 줄(한국어) 또는 null", "sources": [활용한 지식 번호]}`;
 }
 
 const UNAVAILABLE_MSG =
-  "지금은 두뇌(Gemini)에 연결하지 못했어요. Firebase 콘솔 > AI Logic에서 활성화하면 제가 진짜로 대답할 수 있어요! 그전까지는 알 속에서 여러분의 대화를 듣고 있을게요. 🥚";
+  "지금은 두뇌에 연결하지 못했어요. 사이드바 하단 ⚙️ 두뇌 설정에서 연결 상태를 확인해 주세요. 그전까지는 알 속에서 여러분의 대화를 듣고 있을게요. 🥚";
 const QUOTA_MSG =
   "지금 무료 사용량 한도(분당·일일)를 초과했어요. ⏳ 잠시 뒤 다시 불러주시면 돼요. (사용량이 많으면 Firebase Blaze 요금제로 한도를 올릴 수 있어요.)";
 
@@ -106,40 +198,38 @@ function isQuotaError(e) {
 
 /**
  * 에이전트 응답 생성.
- * @returns {Promise<{reply:string, learned:string|null, ok:boolean}>}
+ * @returns {Promise<{reply:string, learned:string|null, sources:number[], ok:boolean}>}
+ * sources: 답변에 실제 활용한 학습 지식의 번호(1-based) — "출처 각주"용
  */
 export async function respond({ agent, memories, recent, userName, userText, levelName, meeting }) {
-  const m = model();
-  if (!m) return { reply: UNAVAILABLE_MSG, learned: null, ok: false };
-
-  let res;
+  let text = null;
   try {
-    res = await withTimeout(
-      m.generateContent(buildPrompt({ agent, memories, recent, userName, userText, levelName, meeting })),
-      TIMEOUT_MS
-    );
+    text = await callLLM(buildPrompt({ agent, memories, recent, userName, userText, levelName, meeting }));
   } catch (e) {
-    if (e && e.isTimeout) return { reply: "음... 생각이 너무 길어졌어요. 다시 한 번 불러주실래요?", learned: null, ok: false };
-    if (isQuotaError(e)) return { reply: QUOTA_MSG, learned: null, ok: false };
-    return { reply: UNAVAILABLE_MSG, learned: null, ok: false };
+    if (e && e.isTimeout) return { reply: "음... 생각이 너무 길어졌어요. 다시 한 번 불러주실래요?", learned: null, sources: [], ok: false };
+    if (isQuotaError(e)) return { reply: QUOTA_MSG, learned: null, sources: [], ok: false };
+    return { reply: UNAVAILABLE_MSG, learned: null, sources: [], ok: false };
   }
 
-  let text = null;
-  try { text = res.response.text(); } catch (_) {}
   const parsed = parseJson(text);
   if (!parsed || typeof parsed.reply !== "string") {
     // JSON 파싱 실패 시에도 raw 텍스트라도 답으로
     const fallback = (text && text.trim()) ? text.trim().slice(0, 800) : "답을 정리하지 못했어요. 다시 물어봐 주세요.";
-    return { reply: fallback, learned: null, ok: true };
+    return { reply: fallback, learned: null, sources: [], ok: true };
   }
   const learned =
     typeof parsed.learned === "string" && parsed.learned.trim() && parsed.learned.trim().toLowerCase() !== "null"
       ? parsed.learned.trim()
       : null;
-  return { reply: parsed.reply.trim(), learned, ok: true };
+  const sources = Array.isArray(parsed.sources)
+    ? parsed.sources.map(Number).filter((n) => Number.isInteger(n) && n >= 1 && n <= memories.length).slice(0, 3)
+    : [];
+  return { reply: parsed.reply.trim(), learned, sources, ok: true };
 }
 
 export function aiAvailable() {
+  const cfg = getBrainConfig();
+  if (cfg.provider === "hermes" && cfg.apiKey) return true;
   return !!model();
 }
 
@@ -148,20 +238,15 @@ export function aiAvailable() {
  * @returns {Promise<{points:string[], issues:string[]}|null>}
  */
 export async function summarize(messages) {
-  const m = model();
-  if (!m) return null;
   const convo = messages.map((x) => `${x.senderName}: ${x.content}`).join("\n").slice(0, 8000);
   try {
-    const res = await withTimeout(
-      m.generateContent(
+    const text = await callLLM(
 `다음은 팀 협업 채널의 대화다. 맥락을 잃지 않도록 압축해 STRICT JSON으로만 출력하라(코드펜스·설명 금지).
 {"points": ["지금까지의 핵심 결정/합의/정보를 한국어 불릿 3~6개"], "issues": ["아직 미해결이거나 결정이 필요한 쟁점 0~4개(없으면 빈 배열)"]}
 
 대화:
-${convo}`),
-      TIMEOUT_MS
-    );
-    const parsed = parseJson(res.response.text());
+${convo}`);
+    const parsed = parseJson(text);
     if (!parsed) return null;
     return {
       points: Array.isArray(parsed.points) ? parsed.points.slice(0, 6) : [],
@@ -177,12 +262,9 @@ ${convo}`),
  * @returns {Promise<{title:string, code:string}|null>}
  */
 export async function visualize({ topic, recent }) {
-  const m = model();
-  if (!m) return null;
   const convo = (recent || []).map((x) => `${x.senderName}: ${x.content}`).join("\n").slice(0, 4000);
   try {
-    const res = await withTimeout(
-      m.generateContent(
+    const text = await callLLM(
 `아래 주제(및 대화 맥락)를 한눈에 보이는 다이어그램으로 만들어라. mermaid.js 문법으로 작성한다.
 - 주제: ${topic}
 - 대화 맥락:
@@ -192,10 +274,8 @@ ${convo || "(없음)"}
 - 관계/흐름이면 flowchart(예: graph TD), 아이디어 확장이면 mindmap 을 골라라.
 - 노드 라벨은 한국어로 짧게. 노드 텍스트에 (), :, ;, # 같은 특수문자는 넣지 말고, 꼭 필요하면 큰따옴표로 감싸라.
 - 반드시 파싱 가능한 유효한 mermaid 코드여야 한다. 5~12개 노드 정도로 간결하게.
-- STRICT JSON만 출력(코드펜스·설명 금지): {"title":"제목(한국어, 12자 내외)","code":"mermaid 코드"}`),
-      TIMEOUT_MS
-    );
-    const p = parseJson(res.response.text());
+- STRICT JSON만 출력(코드펜스·설명 금지): {"title":"제목(한국어, 12자 내외)","code":"mermaid 코드"}`);
+    const p = parseJson(text);
     if (!p || typeof p.code !== "string") return null;
     let code = p.code.trim().replace(/^```(?:mermaid)?\s*/i, "").replace(/```$/, "").trim();
     return { title: (p.title || "시각화").slice(0, 40), code };
@@ -209,17 +289,12 @@ ${convo || "(없음)"}
  * plan/swot/tasks/pitch/name/canvas/brainstorm/decide 등 산출물 명령의 공용 엔진.
  */
 export async function structuredCard(instruction) {
-  const m = model();
-  if (!m) return null;
   try {
-    const res = await withTimeout(
-      m.generateContent(
-        instruction +
-        `\n\n반드시 아래 STRICT JSON만 출력하라(코드펜스·설명 금지). 모든 텍스트는 한국어:
-{"title":"카드 제목(짧게)","sections":[{"heading":"소제목","items":["항목1","항목2"]}]}`),
-      TIMEOUT_MS
-    );
-    const p = parseJson(res.response.text());
+    const text = await callLLM(
+      instruction +
+      `\n\n반드시 아래 STRICT JSON만 출력하라(코드펜스·설명 금지). 모든 텍스트는 한국어:
+{"title":"카드 제목(짧게)","sections":[{"heading":"소제목","items":["항목1","항목2"]}]}`);
+    const p = parseJson(text);
     if (!p || !Array.isArray(p.sections)) return null;
     const sections = p.sections
       .filter((s) => s && s.heading)
@@ -240,22 +315,17 @@ export async function structuredCard(instruction) {
  * @returns {Promise<{score:number, reason:string}|null>}
  */
 export async function score({ agent, memories, item }) {
-  const m = model();
-  if (!m) return null;
   const mem = (memories && memories.length) ? memories.map((x, i) => `${i + 1}. ${x}`).join("\n") : "(없음)";
   try {
-    const res = await withTimeout(
-      m.generateContent(
+    const text = await callLLM(
 `너는 "${agent.name}"이며 역할은 다음과 같다: ${agent.persona || "팀의 조력자"}.
 아래 "평가 대상"을 너의 역할 관점에서 냉정하게 1~10점으로 평가하라(10=탁월, 1=매우 부족). 후하게 주지 마라.
 [네가 아는 팀 지식]
 ${mem}
 [평가 대상]
 ${item}
-STRICT JSON만 출력(코드펜스 금지): {"score": 1에서 10 사이 정수, "reason": "핵심 근거 한국어 1~2문장"}`),
-      TIMEOUT_MS
-    );
-    const p = parseJson(res.response.text());
+STRICT JSON만 출력(코드펜스 금지): {"score": 1에서 10 사이 정수, "reason": "핵심 근거 한국어 1~2문장"}`);
+    const p = parseJson(text);
     if (!p) return null;
     let s = Number(p.score);
     if (!isFinite(s)) s = 5;

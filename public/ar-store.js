@@ -173,6 +173,7 @@ export async function sendMessage(wsId, chId, msg) {
     reactions: 0,
     agentId: msg.agentId || null,
     ...(msg.image ? { image: msg.image } : {}),
+    ...(msg.sources && msg.sources.length ? { sources: msg.sources.slice(0, 3) } : {}),
     createdAt: serverTimestamp(),
   });
 }

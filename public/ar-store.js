@@ -2,7 +2,7 @@
 import { db } from "./firebase-config.js";
 import {
   collection, doc, addDoc, setDoc, getDoc, getDocs,
-  updateDoc, deleteDoc, onSnapshot, query, where, orderBy, limit,
+  updateDoc, deleteDoc, onSnapshot, query, where, orderBy, limit, limitToLast,
   serverTimestamp, arrayUnion, arrayRemove, increment,
 } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-firestore.js";
 
@@ -183,9 +183,11 @@ export async function deleteMessage(wsId, chId, msgId) {
 }
 
 export function listenMessages(wsId, chId, cb) {
+  // limitToLast: '최신 200개'를 구독 — limit(asc)이면 가장 오래된 200개에 갇혀
+  // 201번째부터 새 메시지가 영영 안 보이는 치명 버그가 됨
   const q = query(
     collection(db, "workspaces", wsId, "channels", chId, "messages"),
-    orderBy("createdAt", "asc"), limit(200)
+    orderBy("createdAt", "asc"), limitToLast(200)
   );
   return watch(q, (snap) => cb(snap.docs.map((d) => ({ id: d.id, ...d.data() }))));
 }

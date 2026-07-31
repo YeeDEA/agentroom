@@ -221,6 +221,18 @@ button { font-family: inherit; }
   padding: 3px 8px; font-size: 12px; cursor: pointer; line-height: 1.2; }
 .msg-tool:hover { background: var(--bg-4); color: var(--txt); }
 .msg-tool.msg-del:hover { color: var(--danger); }
+.msg-tool.msg-promote:hover { color: var(--accent-2); }
+.msg-tool.promoted { opacity: .65; cursor: default; }
+/* 기억 큐레이션 (승격 배지 + 액션) */
+.mem-item .mem-meta { display: flex; align-items: center; justify-content: space-between; margin-bottom: 3px; }
+.mem-badge { font-size: 9px; padding: 1px 6px; border-radius: 6px; background: var(--bg-4); color: var(--txt-mute); }
+.mem-badge.p { background: rgba(198,255,94,.14); color: var(--lime); }
+.mem-item.promoted { border-left-color: var(--lime); }
+.mem-acts { display: flex; gap: 2px; opacity: 0; transition: opacity .12s; }
+.mem-item:hover .mem-acts { opacity: 1; }
+.mem-act { background: transparent; border: 0; color: var(--txt-mute); cursor: pointer; font-size: 11px; padding: 1px 5px; border-radius: 6px; }
+.mem-act:hover { background: var(--bg-4); color: var(--txt); }
+.mem-act.mem-del:hover { color: var(--danger); }
 /* @멘션 자동완성 아이템 */
 .mention-ava { width: 24px; height: 24px; image-rendering: pixelated; flex: 0 0 auto; }
 .mention-user-dot { width: 24px; height: 24px; border-radius: 8px; background: linear-gradient(135deg,#4a4370,#332e58);

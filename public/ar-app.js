@@ -582,7 +582,13 @@ function msgHtml(m) {
   // 호버 툴바: 복사(모든 메시지) + 삭제(내 메시지, 보낸 지 5분 이내)
   const ageMs = m.createdAt && m.createdAt.seconds ? Date.now() - m.createdAt.seconds * 1000 : 0;
   const canDel = mine && ageMs < 5 * 60 * 1000;
-  const del = `<div class="msg-tools">` +
+  // 🧠 승격: 이 메시지를 채널 에이전트들의 '팀 승격 기억'으로 (자동 학습과 병행되는 절충 모델)
+  const promote = m.content
+    ? (m.promotedToMemory
+        ? `<button class="msg-tool promoted" title="이미 팀 기억으로 승격됨" disabled>🧠✓</button>`
+        : `<button class="msg-tool msg-promote" data-msg="${m.id}" title="팀 기억으로 승격 — 채널 에이전트들이 우선 기억합니다">🧠</button>`)
+    : "";
+  const del = `<div class="msg-tools">` + promote +
     (m.content ? `<button class="msg-tool msg-copy" data-msg="${m.id}" title="내용 복사">📋</button>` : "") +
     (canDel ? `<button class="msg-tool msg-del" data-msg="${m.id}" title="내 메시지 삭제 (5분 이내만)">🗑</button>` : "") +
     `</div>`;
@@ -610,8 +616,30 @@ function agentLevel(agentId) {
   return a ? a.level : 1;
 }
 
-// 👍 / 📋 / 🗑 이벤트 위임
+// 👍 / 🧠 / 📋 / 🗑 이벤트 위임
 $("messages").addEventListener("click", async (e) => {
+  // 🧠 팀 기억으로 승격 — 채널의 모든 에이전트에게 우선 기억으로 저장 (AI 호출 없음)
+  const proBtn = e.target.closest(".msg-promote");
+  if (proBtn) {
+    const msg = state.messages.find((x) => x.id === proBtn.dataset.msg);
+    if (!msg) return;
+    const cas = channelAgents();
+    if (!cas.length) { toast("이 채널에 기억할 에이전트가 없어요. 먼저 에이전트를 추가하세요."); return; }
+    proBtn.disabled = true;
+    try {
+      const content = `${msg.senderName}: ${msg.content}`;
+      for (const a of cas) {
+        await store.addMemory(state.currentWsId, a.id, {
+          content, sourceChannelId: state.currentChId,
+          importance: 1, promoted: true, promotedBy: state.user.uid,
+        });
+        await awardExp(a.id, EXP.LEARN, 1);
+      }
+      await store.markMessagePromoted(state.currentWsId, state.currentChId, msg.id);
+      toast(`🧠 팀 기억으로 승격 — ${cas.map((a) => a.name).join(", ")}이(가) 우선 기억합니다.`);
+    } catch (err) { toast("승격 실패: " + (err.message || err)); proBtn.disabled = false; }
+    return;
+  }
   // 메시지 내용 복사
   const copyBtn = e.target.closest(".msg-copy");
   if (copyBtn) {
@@ -1183,8 +1211,22 @@ function openEditAgentModal(a) {
 function renderMemories() {
   $("mem-count").textContent = state.memories.length;
   const ul = $("mem-list");
-  if (!state.memories.length) { ul.innerHTML = `<li class="mem-empty">아직 학습한 지식이 없어요. 대화에서 배운 내용이 여기 쌓입니다.</li>`; return; }
-  ul.innerHTML = state.memories.map((m) => `<li class="mem-item">${esc(m.content)}</li>`).join("");
+  if (!state.memories.length) { ul.innerHTML = `<li class="mem-empty">아직 학습한 지식이 없어요. 대화에서 배운 내용이 여기 쌓이고, 메시지의 🧠 버튼으로 직접 승격할 수도 있어요.</li>`; return; }
+  ul.innerHTML = state.memories.map((m) => `<li class="mem-item${m.promoted ? " promoted" : ""}">
+    <div class="mem-meta"><span class="mem-badge${m.promoted ? " p" : ""}">${m.promoted ? "🧠 승격" : "자동"}</span>
+      <span class="mem-acts">${m.promoted ? "" : `<button class="mem-act mem-up" data-id="${m.id}" title="팀 기억으로 승격 — 답변에 우선 반영">🧠</button>`}<button class="mem-act mem-del" data-id="${m.id}" title="이 기억 삭제">✕</button></span></div>
+    ${esc(m.content)}</li>`).join("");
+  ul.querySelectorAll(".mem-up").forEach((b) => b.onclick = async () => {
+    try { await store.promoteMemory(state.currentWsId, state.selectedAgentId, b.dataset.id, state.user.uid); toast("🧠 승격했어요 — 답변에 우선 반영됩니다."); }
+    catch (e) { toast("승격 실패: " + (e.message || e)); }
+  });
+  ul.querySelectorAll(".mem-del").forEach((b) => b.onclick = async () => {
+    try {
+      await store.deleteMemory(state.currentWsId, state.selectedAgentId, b.dataset.id);
+      await store.applyGrowth(state.currentWsId, state.selectedAgentId, { knowledgeDelta: -1 });
+      toast("기억을 삭제했어요.");
+    } catch (e) { toast("삭제 실패: " + (e.message || e)); }
+  });
 }
 
 function triggerEat() {

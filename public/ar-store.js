@@ -301,14 +301,32 @@ export async function applyGrowth(wsId, agentId, { expDelta = 0, knowledgeDelta 
   }
 }
 
-// ---------- 에이전트 메모리(셀프러닝) ----------
-export async function addMemory(wsId, agentId, { content, sourceChannelId, importance = 0.6 }) {
+// ---------- 에이전트 메모리(셀프러닝 + 🧠 승격) ----------
+// promoted=true: 팀이 명시적으로 승격한 기억 — 답변 컨텍스트에 우선 주입된다.
+export async function addMemory(wsId, agentId, { content, sourceChannelId, importance = 0.6, promoted = false, promotedBy = null }) {
   await addDoc(collection(db, "workspaces", wsId, "agents", agentId, "memories"), {
     content: content.slice(0, 500),
     sourceChannelId: sourceChannelId || null,
     importance,
+    promoted: !!promoted,
+    ...(promotedBy ? { promotedBy } : {}),
     createdAt: serverTimestamp(),
   });
+}
+
+export async function promoteMemory(wsId, agentId, memId, uid) {
+  await updateDoc(doc(db, "workspaces", wsId, "agents", agentId, "memories", memId), {
+    promoted: true, importance: 1, ...(uid ? { promotedBy: uid } : {}),
+  });
+}
+
+export async function deleteMemory(wsId, agentId, memId) {
+  await deleteDoc(doc(db, "workspaces", wsId, "agents", agentId, "memories", memId));
+}
+
+// 메시지를 팀 기억으로 승격했음을 표시(🧠 버튼 상태용)
+export async function markMessagePromoted(wsId, chId, msgId) {
+  await updateDoc(doc(db, "workspaces", wsId, "channels", chId, "messages", msgId), { promotedToMemory: true });
 }
 
 export function listenMemories(wsId, agentId, cb) {
@@ -319,12 +337,16 @@ export function listenMemories(wsId, agentId, cb) {
   return watch(q, (snap) => cb(snap.docs.map((d) => ({ id: d.id, ...d.data() }))));
 }
 
-// 컨텍스트 주입용: 최근 메모리 top-K (1회성 조회)
+// 컨텍스트 주입용 top-K: 🧠 승격 기억 우선, 남은 자리는 최신 자동 학습으로
 export async function fetchTopMemories(wsId, agentId, k = 6) {
   const q = query(
     collection(db, "workspaces", wsId, "agents", agentId, "memories"),
-    orderBy("createdAt", "desc"), limit(k)
+    orderBy("createdAt", "desc"), limit(20)
   );
   const snap = await getDocs(q);
-  return snap.docs.map((d) => d.data().content);
+  const all = snap.docs.map((d) => d.data());
+  const promoted = all.filter((m) => m.promoted);
+  const auto = all.filter((m) => !m.promoted);
+  return [...promoted, ...auto].slice(0, k)
+    .map((m) => (m.promoted ? "[팀 승격] " : "") + m.content);
 }

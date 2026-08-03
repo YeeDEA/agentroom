@@ -68,19 +68,38 @@ export function genPin() {
 }
 
 // ---------- 워크스페이스 ----------
-export async function createWorkspace(uid, name) {
-  const ref = await addDoc(collection(db, "workspaces"), {
-    name: name.slice(0, 80),
-    ownerId: uid,
-    memberIds: [uid],
-    code: genInviteCode(),
-    pin: genPin(),
+// 초대 비밀: 문서 ID 자체가 "CODE-PIN" (규칙이 해시를 계산할 수 없으므로
+// 문서 ID를 비밀로 쓴다. get만 허용·list 금지 → 열거 불가)
+export function inviteSecret(code, pin) {
+  return `${String(code || "").trim().toUpperCase()}-${String(pin || "").trim()}`;
+}
+
+// 초대 문서 생성 — 내용에는 비밀을 담지 않는다(wsId/이름만)
+async function writeInvite(secret, wsId, wsName) {
+  await setDoc(doc(db, "invites", secret), {
+    wsId,
+    wsName: String(wsName || "").slice(0, 80),
     createdAt: serverTimestamp(),
   });
+}
+
+export async function createWorkspace(uid, name) {
+  const wsName = name.slice(0, 80);
+  const code = genInviteCode(), pin = genPin();
+  const ref = await addDoc(collection(db, "workspaces"), {
+    name: wsName,
+    ownerId: uid,
+    memberIds: [uid],
+    code,
+    pin,
+    createdAt: serverTimestamp(),
+  });
+  // 초대 문서도 함께 생성 (없으면 코드 참여 불가)
+  await writeInvite(inviteSecret(code, pin), ref.id, wsName);
   return ref.id;
 }
 
-// 기존 워크스페이스에 코드/비밀번호가 없으면 생성해서 채움
+// 기존 워크스페이스에 코드/비밀번호가 없으면 생성하고, 초대 문서도 보장한다
 export async function ensureWorkspaceCode(wsId, existing) {
   let code = existing?.code, pin = existing?.pin;
   const patch = {};
@@ -89,36 +108,48 @@ export async function ensureWorkspaceCode(wsId, existing) {
   if (Object.keys(patch).length) {
     try { await updateDoc(doc(db, "workspaces", wsId), patch); } catch (e) { console.warn(e); }
   }
+  // 초대 문서 없으면(구 데이터 마이그레이션) 생성
+  const secret = inviteSecret(code, pin);
+  try {
+    const inv = await getDoc(doc(db, "invites", secret));
+    if (!inv.exists()) await writeInvite(secret, wsId, existing?.name);
+  } catch (e) { console.warn("[AgentRoom] ensureInvite:", e.code || e.message); }
   return { code, pin };
 }
 
-export async function joinWorkspace(uid, wsId) {
-  const ref = doc(db, "workspaces", wsId);
-  const snap = await getDoc(ref);
-  if (!snap.exists()) throw new Error("존재하지 않는 워크스페이스입니다.");
-  await updateDoc(ref, { memberIds: arrayUnion(uid) });
-  return snap.data().name;
+// 6자리 코드 + 4자리 비밀번호로 참여
+// 규칙이 exists(invites/{CODE-PIN})로 "둘 다 앎"을 검증하므로 joinSecret을 함께 쓴다.
+export async function joinByCode(uid, rawCode, rawPin) {
+  const code = String(rawCode || "").trim().toUpperCase();
+  const pin = String(rawPin || "").trim();
+  if (!code) throw new Error("초대코드를 입력하세요.");
+  if (!pin) throw new Error("방 비밀번호(4자리)를 입력하세요.");
+
+  const secret = inviteSecret(code, pin);
+  let inv;
+  try {
+    inv = await getDoc(doc(db, "invites", secret));
+  } catch (e) {
+    throw new Error("초대 확인에 실패했어요. 잠시 후 다시 시도해 주세요.");
+  }
+  if (!inv.exists()) throw new Error("초대코드 또는 비밀번호가 올바르지 않아요.");
+
+  const { wsId, wsName } = inv.data();
+  await updateDoc(doc(db, "workspaces", wsId), {
+    memberIds: arrayUnion(uid),
+    joinSecret: secret, // 규칙이 이 값으로 초대 문서 존재를 검증
+  });
+  return wsName || "워크스페이스";
 }
 
-// 6자리 코드 + 4자리 비밀번호로 참여 (긴 ID 폴백 허용)
-export async function joinByCode(uid, raw, pin) {
-  const code = String(raw || "").trim();
-  if (!code) throw new Error("코드를 입력하세요.");
-  // 1) 6자리 코드로 조회
-  const up = code.toUpperCase();
-  const q = query(collection(db, "workspaces"), where("code", "==", up));
-  const snap = await getDocs(q);
-  if (!snap.empty) {
-    const d = snap.docs[0];
-    const data = d.data();
-    if (data.pin && data.pin !== String(pin || "").trim()) {
-      throw new Error("비밀번호(4자리)가 맞지 않아요.");
-    }
-    await updateDoc(doc(db, "workspaces", d.id), { memberIds: arrayUnion(uid) });
-    return data.name;
-  }
-  // 2) 긴 워크스페이스 ID로 폴백
-  return joinWorkspace(uid, code);
+// ---------- 멤버 관리 ----------
+// owner 전용 강퇴 (규칙 (d))
+export async function kickMember(wsId, targetUid) {
+  await updateDoc(doc(db, "workspaces", wsId), { memberIds: arrayRemove(targetUid) });
+}
+// 본인 탈퇴 (규칙 (c))
+export async function leaveWorkspace(wsId, uid) {
+  await updateDoc(doc(db, "workspaces", wsId), { memberIds: arrayRemove(uid) });
 }
 
 // ---------- 방 프로필(방별 이모지/닉네임) ----------

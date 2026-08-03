@@ -1,0 +1,181 @@
+rules_version = '2';
+
+// ===============================================================
+// AgentRoom + (legacy) Fraud-Shield 프로토타입 규칙
+// ===============================================================
+//
+// AgentRoom 데이터 모델:
+//   workspaces/{wsId}                       name, ownerId, memberIds[], createdAt
+//     channels/{chId}                       name, agentIds[], createdBy, createdAt
+//       messages/{msgId}                    senderId, senderType, senderName, content, mentions[], reactions, agentId, createdAt
+//     agents/{agentId}                      name, persona, hue, exp, level, knowledgeCount, answerCount, channelIds[], createdAt
+//       memories/{memId}                    content, sourceChannelId, importance, createdAt
+//
+// 접근 원칙(프로토타입): 워크스페이스 문서는 로그인 사용자면 조회 가능(초대/참여용).
+// 하위 콘텐츠(채널/메시지/에이전트/메모리)는 멤버만 읽고 쓸 수 있다.
+// ===============================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------------- Helpers ----------------
+    function isAuthenticated() { return request.auth != null; }
+    function uid() { return request.auth.uid; }
+    function isOwner(userId) { return isAuthenticated() && uid() == userId; }
+
+    function hasOnlyAllowedFields(fields) { return request.resource.data.keys().hasOnly(fields); }
+    function hasRequiredFields(fields) { return request.resource.data.keys().hasAll(fields); }
+
+    function isValidEmail(email) {
+      return email is string &&
+        email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+    function isValidOptionalString(field, maxLen) {
+      return !(field in request.resource.data) ||
+        (request.resource.data[field] is string && request.resource.data[field].size() <= maxLen);
+    }
+    function isValidSignal(v) { return v == null || (v is number && v >= 0 && v <= 1); }
+    function areImmutableFieldsUnchanged(fields) {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
+    }
+
+    // 워크스페이스 멤버십(하위 컬렉션 규칙에서 사용)
+    function wsMembers(wsId) {
+      return get(/databases/$(database)/documents/workspaces/$(wsId)).data.memberIds;
+    }
+    function isWsMember(wsId) {
+      return isAuthenticated() && uid() in wsMembers(wsId);
+    }
+
+    // ===============================================================
+    // users
+    // ===============================================================
+    function isValidUser(userId) {
+      return hasOnlyAllowedFields(['uid', 'email', 'displayName', 'createdAt', 'avatarEmoji']) &&
+        hasRequiredFields(['uid', 'email', 'createdAt']) &&
+        request.resource.data.uid == userId &&
+        isValidEmail(request.resource.data.email) &&
+        request.resource.data.createdAt is timestamp &&
+        isValidOptionalString('displayName', 100) &&
+        isValidOptionalString('avatarEmoji', 8);
+    }
+
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidUser(userId);
+      allow update: if isOwner(userId) && isValidUser(userId) &&
+        areImmutableFieldsUnchanged(['uid', 'email', 'createdAt']);
+      allow delete: if isOwner(userId);
+    }
+
+    // ===============================================================
+    // AgentRoom: workspaces
+    // ===============================================================
+    match /workspaces/{wsId} {
+      // 로그인 사용자면 조회 가능(초대 ID로 참여하기 위함).
+      allow read: if isAuthenticated();
+
+      allow create: if isAuthenticated() &&
+        hasOnlyAllowedFields(['name', 'ownerId', 'memberIds', 'createdAt', 'code', 'pin']) &&
+        hasRequiredFields(['name', 'ownerId', 'memberIds', 'createdAt']) &&
+        request.resource.data.name is string &&
+        request.resource.data.name.size() > 0 &&
+        request.resource.data.name.size() <= 80 &&
+        request.resource.data.ownerId == uid() &&
+        request.resource.data.memberIds is list &&
+        uid() in request.resource.data.memberIds &&
+        request.resource.data.createdAt is timestamp;
+
+      // 업데이트: (a) 기존 멤버는 이름/멤버/코드 수정 가능, ownerId 불변
+      //          (b) 비멤버는 오직 자신을 memberIds에 추가(참여)만 가능
+      allow update: if isAuthenticated() &&
+        request.resource.data.ownerId == resource.data.ownerId && (
+          (uid() in resource.data.memberIds &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'memberIds', 'code', 'pin']))
+          ||
+          (!(uid() in resource.data.memberIds) &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberIds']) &&
+            request.resource.data.memberIds.hasAll(resource.data.memberIds) &&
+            uid() in request.resource.data.memberIds)
+        );
+
+      allow delete: if isAuthenticated() && resource.data.ownerId == uid();
+
+      // ------------- profiles (방별 프로필: 이모지/닉네임) -------------
+      match /profiles/{pid} {
+        allow read: if isWsMember(wsId);
+        allow write: if isWsMember(wsId) && pid == uid();
+      }
+
+      // ------------- channels -------------
+      match /channels/{chId} {
+        allow read: if isWsMember(wsId);
+        allow create, update, delete: if isWsMember(wsId);
+
+        // ------------- messages -------------
+        match /messages/{msgId} {
+          allow read: if isWsMember(wsId);
+          allow create: if isWsMember(wsId) &&
+            request.resource.data.content is string &&
+            request.resource.data.content.size() <= 8000 &&
+            request.resource.data.senderType in ['user', 'agent', 'system'] &&
+            // 사람 메시지는 본인 uid로만 (발신자 사칭 방지)
+            (request.resource.data.senderType != 'user' ||
+              request.resource.data.senderId == uid());
+          // 좋아요(reactions) 등 소소한 갱신 허용
+          allow update: if isWsMember(wsId);
+          allow delete: if isWsMember(wsId);
+        }
+      }
+
+      // ------------- agents -------------
+      match /agents/{agentId} {
+        allow read: if isWsMember(wsId);
+        allow create, update, delete: if isWsMember(wsId);
+
+        // ------------- memories (셀프러닝) -------------
+        match /memories/{memId} {
+          allow read: if isWsMember(wsId);
+          allow create, update, delete: if isWsMember(wsId);
+        }
+      }
+    }
+
+    // ===============================================================
+    // (legacy) Fraud-Shield 프로토타입 컬렉션 — 유지
+    // ===============================================================
+    match /leads/{leadId} {
+      allow read, update, delete: if false;
+      allow create: if hasOnlyAllowedFields(['email', 'createdAt']) &&
+        hasRequiredFields(['email', 'createdAt']) &&
+        isValidEmail(request.resource.data.email) &&
+        request.resource.data.email.size() <= 200 &&
+        request.resource.data.createdAt is timestamp;
+    }
+
+    match /detections/{detectionId} {
+      allow read, update, delete: if false;
+      allow create: if hasOnlyAllowedFields(['signals', 'verdict', 'source', 'elapsedMs', 'createdAt']) &&
+        hasRequiredFields(['signals', 'verdict', 'source', 'elapsedMs', 'createdAt']) &&
+        request.resource.data.signals is map &&
+        request.resource.data.signals.keys().hasOnly(['metadata', 'frequency', 'recompression', 'sensor', 'gemini']) &&
+        request.resource.data.signals.keys().hasAll(['metadata', 'frequency', 'recompression', 'sensor', 'gemini']) &&
+        isValidSignal(request.resource.data.signals.metadata) &&
+        isValidSignal(request.resource.data.signals.frequency) &&
+        isValidSignal(request.resource.data.signals.recompression) &&
+        isValidSignal(request.resource.data.signals.sensor) &&
+        isValidSignal(request.resource.data.signals.gemini) &&
+        request.resource.data.verdict in ['green', 'amber', 'red'] &&
+        request.resource.data.source in ['sample', 'upload'] &&
+        request.resource.data.elapsedMs is number &&
+        request.resource.data.elapsedMs > 0 &&
+        request.resource.data.elapsedMs < 600000 &&
+        request.resource.data.createdAt is timestamp;
+    }
+
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

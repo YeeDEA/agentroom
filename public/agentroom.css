@@ -252,6 +252,12 @@ button { font-family: inherit; }
 /* 초대 비밀번호 */
 .invite-pin { text-align: center; font-size: 14px; color: var(--txt-dim); margin: -6px 0 14px; }
 .invite-pin b { color: var(--gold); letter-spacing: 3px; font-size: 18px; }
+/* 멤버 관리 */
+.member-list { display: flex; flex-direction: column; gap: 4px; max-height: 200px; overflow: auto; margin-bottom: 14px; }
+.member-row { display: flex; align-items: center; gap: 6px; padding: 7px 10px; background: var(--bg-3);
+  border: 1px solid var(--line); border-radius: 8px; font-size: 13px; }
+.member-name { color: var(--txt); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.member-act { margin-left: auto; }
 .msg-ava { width: 38px; height: 38px; border-radius: 10px; flex: 0 0 auto; display: grid; place-items: center;
   font-weight: 700; color: #fff; image-rendering: pixelated; }
 .msg-ava.user { background: linear-gradient(135deg,#4a4370,#332e58); }

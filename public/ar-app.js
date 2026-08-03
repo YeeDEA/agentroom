@@ -1323,11 +1323,26 @@ $("ws-invite-btn").onclick = async () => {
   const ws = state.workspaces.find((w) => w.id === state.currentWsId);
   let code = ws?.code, pin = ws?.pin;
   try { const meta = await store.ensureWorkspaceCode(state.currentWsId, ws); code = meta.code; pin = meta.pin; } catch (_) {}
+  const myUid = state.user.uid;
+  const isOwner = ws?.ownerId === myUid;
+  const members = ws?.memberIds || [];
+  const memberRows = members.map((m) => {
+    const label = nameFor(m, m === myUid ? meName() : `멤버 ${m.slice(0, 6)}`);
+    const tags = (m === ws?.ownerId ? `<span class="mem-badge p">방장</span>` : "") +
+      (m === myUid ? `<span class="mem-badge">나</span>` : "");
+    const act = (isOwner && m !== myUid)
+      ? `<button class="mini-btn danger mem-kick" data-uid="${esc(m)}">내보내기</button>`
+      : (m === myUid && !isOwner ? `<button class="mini-btn mem-leave">방 나가기</button>` : "");
+    return `<div class="member-row"><span class="member-name">${esc(label)}</span>${tags}<span class="member-act">${act}</span></div>`;
+  }).join("");
+
   openModal(`
-    <h3>멤버 초대</h3>
+    <h3>멤버 초대 · 관리</h3>
     <p class="sub"><b>6자리 코드</b>와 <b>4자리 비밀번호</b>를 팀원에게 알려주세요. '워크스페이스 ＋ → 참여'에 입력하면 들어옵니다.</p>
     <div class="invite-code" id="invite-code">${esc(code || "------")}</div>
     <div class="invite-pin">🔒 비밀번호 <b>${esc(pin || "----")}</b></div>
+    <div class="mem-head" style="margin-top:16px">👥 멤버 ${members.length}명</div>
+    <div class="member-list">${memberRows || `<span class="mem-empty">멤버 정보를 불러오지 못했어요.</span>`}</div>
     <div class="modal-actions">
       <button class="btn" id="inv-copy">코드+비번 복사</button>
       <button class="btn btn-primary" id="inv-close">닫기</button>
@@ -1336,6 +1351,19 @@ $("ws-invite-btn").onclick = async () => {
   $("inv-copy").onclick = async () => {
     try { await navigator.clipboard.writeText(`AgentRoom 초대 — 코드: ${code} / 비밀번호: ${pin}`); } catch (_) {}
     $("inv-copy").textContent = "복사됨!";
+  };
+  // owner 강퇴 (2단계 확인)
+  $("modal").querySelectorAll(".mem-kick").forEach((b) => b.onclick = async () => {
+    if (b.dataset.armed !== "1") { b.dataset.armed = "1"; b.textContent = "정말?"; setTimeout(() => { if (b.isConnected) { b.dataset.armed = ""; b.textContent = "내보내기"; } }, 2500); return; }
+    try { await store.kickMember(state.currentWsId, b.dataset.uid); closeModal(); toast("멤버를 내보냈어요."); }
+    catch (e) { toast("실패: " + (e.message || e)); }
+  });
+  // 본인 탈퇴 (2단계 확인)
+  const leaveBtn = $("modal").querySelector(".mem-leave");
+  if (leaveBtn) leaveBtn.onclick = async () => {
+    if (leaveBtn.dataset.armed !== "1") { leaveBtn.dataset.armed = "1"; leaveBtn.textContent = "정말 나갈까요?"; setTimeout(() => { if (leaveBtn.isConnected) { leaveBtn.dataset.armed = ""; leaveBtn.textContent = "방 나가기"; } }, 2500); return; }
+    try { await store.leaveWorkspace(state.currentWsId, myUid); closeModal(); toast("방에서 나왔어요."); }
+    catch (e) { toast("실패: " + (e.message || e)); }
   };
 };
 

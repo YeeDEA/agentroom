@@ -5,6 +5,20 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>AgentRoom — 팀의 집단지성을 먹고 자라는 AI 워크스페이스</title>
   <meta name="description" content="디스코드처럼 채널에서 팀과 대화하고, 알에서 깨어나 자라는 AI 에이전트를 함께 키우는 협업 워크스페이스." />
+  <!-- 초기 로딩 속도: CDN 연결을 미리 열고, 첫 화면에 필요한 모듈을 병렬 선반입 -->
+  <link rel="preconnect" href="https://www.gstatic.com" crossorigin />
+  <link rel="dns-prefetch" href="https://firestore.googleapis.com" />
+  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/12.3.0/firebase-app.js" />
+  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/12.3.0/firebase-auth.js" />
+  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/12.3.0/firebase-firestore.js" />
+  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/12.3.0/firebase-ai.js" />
+  <link rel="modulepreload" href="./firebase-config.js" />
+  <link rel="modulepreload" href="./ar-store.js" />
+  <link rel="modulepreload" href="./ar-ai.js" />
+  <link rel="modulepreload" href="./ar-game.js" />
+  <link rel="modulepreload" href="./ar-export.js" />
+  <link rel="modulepreload" href="./ar-sprites.js" />
+  <link rel="modulepreload" href="./ar-app.js" />
   <link rel="stylesheet" href="./agentroom.css" />
   <script>
     // 테마를 CSS 적용 전에 결정해 깜빡임 방지 (기본: 라이트)

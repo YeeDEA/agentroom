@@ -28,6 +28,17 @@ const HUES = [265, 210, 330, 150, 30, 190, 300, 100];
 const AVATAR_PRESETS = ["😀", "😎", "🤓", "🦊", "🐱", "🐶", "🐼", "🐧", "🦄", "🐯", "🐸", "🐵", "🚀", "🔥", "⭐", "🌱", "🍀", "🎯", "💡", "👑"];
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+// 이미지 src 화이트리스트 — 첨부는 압축 후 data:image 로 인라인 저장된다.
+// esc()가 속성 탈출은 막지만 스킴은 못 막으므로, 허용 스킴을 명시적으로 제한한다.
+// (javascript:/data:text/html 차단 + 외부 http 이미지의 추적 픽셀 방지)
+function safeImageSrc(u) {
+  const s = String(u ?? "").trim();
+  if (!s) return "";
+  if (/^data:image\/(png|jpe?g|gif|webp|avif);base64,[A-Za-z0-9+/=\s]+$/i.test(s)) return s;
+  if (/^https:\/\/[^\s"'<>]+$/i.test(s)) return s;
+  return "";
+}
 // 이모지(서로게이트 쌍) 안전하게 첫 글자 추출 — charAt(0)은 이모지를 반쪽 내서 깨짐
 const firstGrapheme = (s) => [...String(s ?? "").trim()][0] || "?";
 // 방 프로필(이모지/닉네임) 우선, 없으면 이름 첫 글자
@@ -623,7 +634,12 @@ function msgHtml(m) {
     (m.content ? `<button class="msg-tool msg-copy" data-msg="${m.id}" title="내용 복사">📋</button>` : "") +
     (canDel ? `<button class="msg-tool msg-del" data-msg="${m.id}" title="내 메시지 삭제 (5분 이내만)">🗑</button>` : "") +
     `</div>`;
-  const img = m.image ? `<img class="msg-img" src="${esc(m.image)}" alt="첨부 이미지" loading="lazy">` : "";
+  const safeImg = safeImageSrc(m.image);
+  const img = m.image
+    ? (safeImg
+        ? `<img class="msg-img" src="${esc(safeImg)}" alt="첨부 이미지" loading="lazy">`
+        : `<div class="msg-img-blocked">🚫 허용되지 않은 형식의 이미지라 표시하지 않았어요.</div>`)
+    : "";
   // 🧠 근거 각주: 에이전트가 실제로 활용한 팀 학습 지식 표시 (신뢰 + "진짜 기억한다" 증명)
   const srcs = isAgent && Array.isArray(m.sources) && m.sources.length
     ? `<div class="msg-sources">🧠 근거: ${m.sources.map((s) => `<span>${esc(s)}</span>`).join(" · ")}</div>` : "";

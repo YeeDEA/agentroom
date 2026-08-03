@@ -259,6 +259,9 @@ button { font-family: inherit; }
 .mem-badge { font-size: 9px; padding: 1px 6px; border-radius: 6px; background: var(--bg-4); color: var(--txt-mute); }
 .mem-badge.p { background: var(--lime-soft); color: var(--lime); }
 .mem-badge.mask { background: var(--bg-4); color: var(--gold); cursor: help; }
+/* 허용되지 않은 스킴의 이미지는 렌더 대신 안내 (XSS·추적 픽셀 차단) */
+.msg-img-blocked { margin-top: 6px; padding: 10px 12px; background: var(--bg-3); border: 1px dashed var(--line);
+  border-radius: 8px; font-size: 12px; color: var(--txt-mute); }
 /* 지식 출처 — 누가·어디서 배웠는지 (UX 중심 시각화) */
 .mem-src { margin-top: 5px; font-size: 10px; color: var(--txt-mute); line-height: 1.5; }
 .mem-item.promoted { border-left-color: var(--lime); }

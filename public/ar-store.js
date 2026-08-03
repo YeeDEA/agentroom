@@ -334,7 +334,93 @@ export async function applyGrowth(wsId, agentId, { expDelta = 0, knowledgeDelta 
   }
 }
 
-// ---------- 에이전트 메모리(셀프러닝 + 🧠 승격) ----------
+// ===============================================================
+// 공동 기억력 (LLM wiki) — workspaces/{ws}/knowledge
+// ---------------------------------------------------------------
+// 에이전트별 사본이 아니라 워크스페이스 하나의 지식 저장소를 모든
+// 에이전트가 함께 읽는다. 새로 합류한 에이전트도 과거 지식을 즉시 얻는다.
+// 워크스페이스 전체 공유이므로, 개인정보는 저장 시점에 마스킹한다.
+// ===============================================================
+
+// 개인정보 마스킹 — 저장 전에 구조화된 PII를 가린다(한국 포맷 우선)
+const PII_RULES = [
+  { kind: "주민번호", re: /\b(\d{6})[-\s]?([1-4]\d{6})\b/g, to: (m, a) => `${a}-●●●●●●●` },
+  { kind: "카드번호", re: /\b(?:\d{4}[-\s]?){3}\d{4}\b/g, to: () => "●●●●-●●●●-●●●●-●●●●" },
+  { kind: "전화번호", re: /\b(01[016-9])[-\s]?(\d{3,4})[-\s]?(\d{4})\b/g, to: (m, a) => `${a}-●●●●-●●●●` },
+  { kind: "전화번호", re: /\b(0\d{1,2})[-\s](\d{3,4})[-\s](\d{4})\b/g, to: (m, a) => `${a}-●●●-●●●●` },
+  { kind: "이메일", re: /\b([\w.+-]{1,2})[\w.+-]*@([\w-]+\.[\w.]+)\b/g, to: (m, a, b) => `${a}●●●@${b}` },
+  { kind: "계좌번호", re: /(계좌|입금|송금|은행)([^\d\n]{0,10})(\d[\d-]{8,})/g, to: (m, a, b) => `${a}${b}●●●●●●●●` },
+  { kind: "여권번호", re: /\b([A-Z])\d{8}\b/g, to: (m, a) => `${a}●●●●●●●●` },
+];
+export function maskPII(text) {
+  let out = String(text || ""), kinds = [];
+  for (const r of PII_RULES) {
+    r.re.lastIndex = 0;
+    if (r.re.test(out)) {
+      r.re.lastIndex = 0;
+      out = out.replace(r.re, r.to);
+      if (!kinds.includes(r.kind)) kinds.push(r.kind);
+    }
+  }
+  return { text: out, masked: kinds.length > 0, kinds };
+}
+
+// 공동 지식 추가 (자동 학습 / 🧠 승격 공용)
+export async function addKnowledge(wsId, { content, promoted = false, sourceChannelId, sourceAgentId, sourceAgentName, sourceMessageId, learnedFrom, promotedBy }) {
+  const m = maskPII(content);
+  return addDoc(collection(db, "workspaces", wsId, "knowledge"), {
+    content: m.text.slice(0, 800),
+    promoted: !!promoted,
+    masked: m.masked,
+    ...(m.masked ? { maskedKinds: m.kinds } : {}),
+    sourceChannelId: sourceChannelId || null,
+    sourceAgentId: sourceAgentId || null,
+    sourceAgentName: sourceAgentName || null,
+    sourceMessageId: sourceMessageId || null,
+    learnedFrom: learnedFrom || null,
+    ...(promotedBy ? { promotedBy } : {}),
+    createdAt: serverTimestamp(),
+  });
+}
+
+export function listenKnowledge(wsId, cb) {
+  const q = query(collection(db, "workspaces", wsId, "knowledge"), orderBy("createdAt", "desc"), limit(60));
+  return watch(q, (snap) => cb(snap.docs.map((d) => ({ id: d.id, ...d.data() }))));
+}
+
+export async function promoteKnowledge(wsId, kid, uid) {
+  await updateDoc(doc(db, "workspaces", wsId, "knowledge", kid), {
+    promoted: true, ...(uid ? { promotedBy: uid } : {}),
+  });
+}
+export async function deleteKnowledge(wsId, kid) {
+  await deleteDoc(doc(db, "workspaces", wsId, "knowledge", kid));
+}
+
+// 기존 에이전트별 memories → 공동 knowledge 로 1회 이관(중복 방지)
+export async function migrateMemoriesToKnowledge(wsId) {
+  const existing = await getDocs(collection(db, "workspaces", wsId, "knowledge"));
+  const seen = new Set(existing.docs.map((d) => d.data().content));
+  const agents = await getDocs(collection(db, "workspaces", wsId, "agents"));
+  let moved = 0;
+  for (const a of agents.docs) {
+    const mems = await getDocs(collection(db, "workspaces", wsId, "agents", a.id, "memories"));
+    for (const m of mems.docs) {
+      const d = m.data();
+      if (seen.has(d.content)) continue;
+      seen.add(d.content);
+      await addKnowledge(wsId, {
+        content: d.content, promoted: !!d.promoted,
+        sourceChannelId: d.sourceChannelId, sourceAgentId: a.id,
+        sourceAgentName: a.data().name, promotedBy: d.promotedBy,
+      });
+      moved++;
+    }
+  }
+  return moved;
+}
+
+// ---------- 에이전트 메모리(레거시 · 이관 원본 보존용) ----------
 // promoted=true: 팀이 명시적으로 승격한 기억 — 답변 컨텍스트에 우선 주입된다.
 export async function addMemory(wsId, agentId, { content, sourceChannelId, importance = 0.6, promoted = false, promotedBy = null }) {
   await addDoc(collection(db, "workspaces", wsId, "agents", agentId, "memories"), {
@@ -370,11 +456,12 @@ export function listenMemories(wsId, agentId, cb) {
   return watch(q, (snap) => cb(snap.docs.map((d) => ({ id: d.id, ...d.data() }))));
 }
 
-// 컨텍스트 주입용 top-K: 🧠 승격 기억 우선, 남은 자리는 최신 자동 학습으로
+// 컨텍스트 주입용 top-K — 워크스페이스 공동 지식에서 뽑는다(모든 에이전트 공유).
+// 🧠 승격 지식 우선, 남은 자리는 최신 자동 학습으로.
 export async function fetchTopMemories(wsId, agentId, k = 6) {
   const q = query(
-    collection(db, "workspaces", wsId, "agents", agentId, "memories"),
-    orderBy("createdAt", "desc"), limit(20)
+    collection(db, "workspaces", wsId, "knowledge"),
+    orderBy("createdAt", "desc"), limit(40)
   );
   const snap = await getDocs(q);
   const all = snap.docs.map((d) => d.data());

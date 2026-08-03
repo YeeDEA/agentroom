@@ -38,14 +38,14 @@ function fillEllipse(ctx, cx, cy, rx, ry, body, outline, hi) {
   }
 }
 
-function eye(ctx, x, y, open, outline) {
+function eye(ctx, x, y, open, outline, ink) {
   if (open) {
     px(ctx, x, y - 1, "#ffffff");
     px(ctx, x - 1, y, "#ffffff");
     px(ctx, x, y, "#ffffff");
     px(ctx, x + 1, y, "#ffffff");
     px(ctx, x, y + 1, "#ffffff");
-    px(ctx, x, y, "#12101f"); // 동공
+    px(ctx, x, y, ink); // 동공
     px(ctx, x + 1, y - 1, "#ffffff");
   } else {
     // 감은 눈(-)
@@ -69,10 +69,12 @@ export function drawPet(canvas, level, hue, mood = "idle") {
   ctx.clearRect(0, 0, GRID, GRID);
   ctx.imageSmoothingEnabled = false;
 
-  const body = hsl(hue, 62, 64);
-  const outline = hsl(hue, 45, 26);
-  const hi = hsl(hue, 70, 80);
-  const belly = hsl(hue, 55, 88);
+  // 파스텔 팔레트 — 업무용 밝은 UI에 어울리도록 채도↓ 명도↑ (윤곽선도 부드럽게)
+  const body = hsl(hue, 68, 74);
+  const outline = hsl(hue, 38, 44);
+  const hi = hsl(hue, 80, 88);
+  const belly = hsl(hue, 60, 95);
+  const ink = hsl(hue, 30, 34); // 눈·입 — 새까만 대신 톤다운
   const eating = mood === "eat";
 
   if (level <= 1) {
@@ -93,10 +95,10 @@ export function drawPet(canvas, level, hue, mood = "idle") {
     fillEllipse(ctx, 16, 18, 9, 8.5, body, outline, hi);
     // 배
     fillEllipse(ctx, 16, 21, 5, 4.5, belly, belly, null);
-    eye(ctx, 13, 16, true, outline);
-    eye(ctx, 19, 16, true, outline);
+    eye(ctx, 13, 16, true, outline, ink);
+    eye(ctx, 19, 16, true, outline, ink);
     // 입
-    if (eating) { px(ctx, 16, 20, "#12101f"); px(ctx, 15, 21, "#12101f"); px(ctx, 17, 21, "#12101f"); px(ctx, 16, 22, "#12101f"); }
+    if (eating) { px(ctx, 16, 20, ink); px(ctx, 15, 21, ink); px(ctx, 17, 21, ink); px(ctx, 16, 22, ink); }
     else { px(ctx, 15, 20, outline); px(ctx, 16, 21, outline); px(ctx, 17, 20, outline); }
     // 발
     px(ctx, 13, 27, outline); px(ctx, 14, 27, outline);
@@ -111,11 +113,11 @@ export function drawPet(canvas, level, hue, mood = "idle") {
     // 성장기: 더 큰 몸 + 팔 + 새싹 안테나
     fillEllipse(ctx, 16, 18, 10, 10, body, outline, hi);
     fillEllipse(ctx, 16, 21, 6, 6, belly, belly, null);
-    eye(ctx, 12, 15, true, outline);
-    eye(ctx, 20, 15, true, outline);
+    eye(ctx, 12, 15, true, outline, ink);
+    eye(ctx, 20, 15, true, outline, ink);
     // 볼터치
     px(ctx, 10, 18, hsl(hue + 20, 70, 72)); px(ctx, 22, 18, hsl(hue + 20, 70, 72));
-    if (eating) { for (const [mx, my] of [[15,19],[16,19],[17,19],[15,20],[16,21],[17,20],[16,22]]) px(ctx, mx, my, "#12101f"); }
+    if (eating) { for (const [mx, my] of [[15,19],[16,19],[17,19],[15,20],[16,21],[17,20],[16,22]]) px(ctx, mx, my, ink); }
     else { px(ctx, 14, 20, outline); px(ctx, 15, 21, outline); px(ctx, 16, 21, outline); px(ctx, 17, 21, outline); px(ctx, 18, 20, outline); }
     // 팔
     px(ctx, 5, 19, outline); px(ctx, 6, 19, body); px(ctx, 6, 20, outline);
@@ -131,10 +133,10 @@ export function drawPet(canvas, level, hue, mood = "idle") {
   // level 4 성숙기: 최대 크기 + 왕관 + 팔 + 반짝임
   fillEllipse(ctx, 16, 19, 11, 10.5, body, outline, hi);
   fillEllipse(ctx, 16, 22, 7, 6.5, belly, belly, null);
-  eye(ctx, 12, 16, true, outline);
-  eye(ctx, 20, 16, true, outline);
+  eye(ctx, 12, 16, true, outline, ink);
+  eye(ctx, 20, 16, true, outline, ink);
   px(ctx, 9, 19, hsl(hue + 20, 70, 72)); px(ctx, 23, 19, hsl(hue + 20, 70, 72));
-  if (eating) { for (const [mx, my] of [[15,20],[16,20],[17,20],[15,21],[16,22],[17,21],[16,23]]) px(ctx, mx, my, "#12101f"); }
+  if (eating) { for (const [mx, my] of [[15,20],[16,20],[17,20],[15,21],[16,22],[17,21],[16,23]]) px(ctx, mx, my, ink); }
   else { px(ctx, 13, 21, outline); px(ctx, 14, 22, outline); px(ctx, 16, 22, outline); px(ctx, 18, 22, outline); px(ctx, 19, 21, outline); }
   // 팔
   px(ctx, 3, 20, outline); px(ctx, 4, 20, body); px(ctx, 4, 21, outline);

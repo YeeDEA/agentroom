@@ -107,6 +107,37 @@ function authError(err) {
 $("logout-btn").onclick = () => signOut(auth);
 $("me-chip").onclick = openProfileModal;
 
+// ---------- ☀️/🌙 테마 (라이트 기본 · 업무용) ----------
+const THEME_KEY = "agentroom_theme";
+function applyTheme(t) {
+  if (t === "dark") document.documentElement.dataset.theme = "dark";
+  else delete document.documentElement.dataset.theme;
+  const b = $("theme-btn");
+  if (b) { b.textContent = t === "dark" ? "☀️" : "🌙"; b.title = t === "dark" ? "라이트로 전환" : "다크로 전환"; }
+  try { localStorage.setItem(THEME_KEY, t); } catch (_) {}
+  // 픽셀 펫은 캔버스라 테마가 바뀌면 다시 그려야 한다
+  renderAgents(); renderChatAgents(); renderMessages();
+  if (state.selectedAgentId) renderPanel();
+}
+function currentTheme() { return document.documentElement.dataset.theme === "dark" ? "dark" : "light"; }
+$("theme-btn").onclick = () => applyTheme(currentTheme() === "dark" ? "light" : "dark");
+(() => { let t = "light"; try { t = localStorage.getItem(THEME_KEY) || "light"; } catch (_) {}
+  const b = $("theme-btn"); if (b) { b.textContent = t === "dark" ? "☀️" : "🌙"; } })();
+
+// ---------- 에이전트 상태 다이얼로그 닫기 ----------
+function closeAgentDialog() {
+  state.selectedAgentId = null;
+  if (state.unsub.memories) { state.unsub.memories(); state.unsub.memories = null; }
+  state.memories = [];
+  $("agent-panel").hidden = true;
+  renderAgents();
+}
+$("panel-close").onclick = closeAgentDialog;
+$("agent-panel").addEventListener("click", (e) => { if (e.target === $("agent-panel")) closeAgentDialog(); });
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !$("agent-panel").hidden) closeAgentDialog();
+});
+
 function renderMe() {
   const ava = $("me-ava"); if (!ava || !state.user) return;
   const uid = state.user.uid;
@@ -433,7 +464,7 @@ function selectAgent(agentId) {
   state.memories = [];
   renderAgents();
   renderPanel();
-  state.unsub.memories = store.listenMemories(state.currentWsId, agentId, (list) => {
+  state.unsub.memories = store.listenKnowledge(state.currentWsId, (list) => {
     state.memories = list;
     renderMemories();
   });
@@ -623,20 +654,17 @@ $("messages").addEventListener("click", async (e) => {
   if (proBtn) {
     const msg = state.messages.find((x) => x.id === proBtn.dataset.msg);
     if (!msg) return;
-    const cas = channelAgents();
-    if (!cas.length) { toast("이 채널에 기억할 에이전트가 없어요. 먼저 에이전트를 추가하세요."); return; }
     proBtn.disabled = true;
     try {
+      // 공동 지식은 한 번만 저장 — 워크스페이스의 모든 에이전트가 함께 읽는다
       const content = `${msg.senderName}: ${msg.content}`;
-      for (const a of cas) {
-        await store.addMemory(state.currentWsId, a.id, {
-          content, sourceChannelId: state.currentChId,
-          importance: 1, promoted: true, promotedBy: state.user.uid,
-        });
-        await awardExp(a.id, EXP.LEARN, 1);
-      }
+      await store.addKnowledge(state.currentWsId, {
+        content, promoted: true, sourceChannelId: state.currentChId,
+        sourceMessageId: msg.id, learnedFrom: msg.senderName, promotedBy: state.user.uid,
+      });
+      for (const a of channelAgents()) await awardExp(a.id, EXP.LEARN, 1);
       await store.markMessagePromoted(state.currentWsId, state.currentChId, msg.id);
-      toast(`🧠 팀 기억으로 승격 — ${cas.map((a) => a.name).join(", ")}이(가) 우선 기억합니다.`);
+      toast("🧠 팀 지식으로 승격 — 이 방의 모든 에이전트가 우선 반영합니다.");
     } catch (err) { toast("승격 실패: " + (err.message || err)); proBtn.disabled = false; }
     return;
   }
@@ -1022,7 +1050,8 @@ async function triggerAgent(agent, userText) {
     if (res.ok) {
       let learnedDelta = 0;
       if (res.learned) {
-        await store.addMemory(wsId, agent.id, { content: res.learned, sourceChannelId: chId });
+        await store.addKnowledge(wsId, { content: res.learned, sourceChannelId: chId,
+          sourceAgentId: agent.id, sourceAgentName: agent.name, learnedFrom: meName() });
         learnedDelta = 1;
         toast(`🧠 ${agent.name}이(가) 새로운 걸 배웠어요!`);
       }
@@ -1067,7 +1096,8 @@ async function runRoundtable(participants, topic, userText) {
       soFar.push({ name: agent.name, content: res.reply });
       if (res.ok) {
         let learnedDelta = 0;
-        if (res.learned) { await store.addMemory(wsId, agent.id, { content: res.learned, sourceChannelId: chId }); learnedDelta = 1; }
+        if (res.learned) { await store.addKnowledge(wsId, { content: res.learned, sourceChannelId: chId,
+          sourceAgentId: agent.id, sourceAgentName: agent.name, learnedFrom: meName() }); learnedDelta = 1; }
         await awardExp(agent.id, EXP.ANSWER + (res.learned ? EXP.LEARN : 0), learnedDelta, 1);
       }
     } catch (err) { console.error(err); }
@@ -1106,8 +1136,9 @@ async function awardExp(agentId, expDelta, knowledgeDelta, answerDelta = 0) {
 // ======================= 에이전트 패널 =======================
 function renderPanel() {
   const a = state.agents.find((x) => x.id === state.selectedAgentId);
-  if (!a) { $("panel-empty").hidden = false; $("panel-body").hidden = true; return; }
-  $("panel-empty").hidden = true; $("panel-body").hidden = false;
+  // 오른쪽 고정 pane이 아니라 다이얼로그 — 선택된 에이전트가 있을 때만 연다
+  if (!a) { $("agent-panel").hidden = true; return; }
+  $("agent-panel").hidden = false;
   const hue = a.hue ?? hueFrom(a.name);
   drawPet($("pet-canvas"), a.level, hue);
   $("pet-name").textContent = a.name;
@@ -1208,23 +1239,40 @@ function openEditAgentModal(a) {
   };
 }
 
+// 🧠 팀 공동 지식 목록 — 출처(누가·어디서 배웠는지)를 함께 보여준다(UX 중심 시각화)
 function renderMemories() {
   $("mem-count").textContent = state.memories.length;
   const ul = $("mem-list");
-  if (!state.memories.length) { ul.innerHTML = `<li class="mem-empty">아직 학습한 지식이 없어요. 대화에서 배운 내용이 여기 쌓이고, 메시지의 🧠 버튼으로 직접 승격할 수도 있어요.</li>`; return; }
-  ul.innerHTML = state.memories.map((m) => `<li class="mem-item${m.promoted ? " promoted" : ""}">
-    <div class="mem-meta"><span class="mem-badge${m.promoted ? " p" : ""}">${m.promoted ? "🧠 승격" : "자동"}</span>
-      <span class="mem-acts">${m.promoted ? "" : `<button class="mem-act mem-up" data-id="${m.id}" title="팀 기억으로 승격 — 답변에 우선 반영">🧠</button>`}<button class="mem-act mem-del" data-id="${m.id}" title="이 기억 삭제">✕</button></span></div>
-    ${esc(m.content)}</li>`).join("");
+  if (!state.memories.length) {
+    ul.innerHTML = `<li class="mem-empty">아직 팀이 쌓은 지식이 없어요. 대화에서 배운 내용이 여기 모이고, 메시지의 🧠 버튼으로 직접 승격할 수도 있어요.</li>`;
+    return;
+  }
+  const chName = (id) => (state.channels.find((c) => c.id === id) || {}).name;
+  ul.innerHTML = state.memories.map((m) => {
+    const src = [];
+    if (m.sourceAgentName) src.push(`🤖 ${esc(m.sourceAgentName)}`);
+    if (chName(m.sourceChannelId)) src.push(`# ${esc(chName(m.sourceChannelId))}`);
+    if (m.learnedFrom) src.push(`${esc(m.learnedFrom)}님 대화`);
+    const when = m.createdAt && m.createdAt.seconds
+      ? new Date(m.createdAt.seconds * 1000).toLocaleDateString("ko-KR", { month: "numeric", day: "numeric" }) : "";
+    return `<li class="mem-item${m.promoted ? " promoted" : ""}">
+      <div class="mem-meta">
+        <span class="mem-badge${m.promoted ? " p" : ""}">${m.promoted ? "🧠 승격" : "자동"}</span>
+        ${m.masked ? `<span class="mem-badge mask" title="개인정보가 가려져 저장됨: ${esc((m.maskedKinds || []).join(", "))}">🔒 마스킹</span>` : ""}
+        <span class="mem-acts">${m.promoted ? "" : `<button class="mem-act mem-up" data-id="${m.id}" title="팀 지식으로 승격 — 모든 에이전트가 우선 반영">🧠</button>`}<button class="mem-act mem-del" data-id="${m.id}" title="이 지식 삭제">✕</button></span>
+      </div>
+      ${esc(m.content)}
+      ${src.length ? `<div class="mem-src">${src.join(" · ")}${when ? ` · ${when}` : ""}</div>` : ""}
+    </li>`;
+  }).join("");
   ul.querySelectorAll(".mem-up").forEach((b) => b.onclick = async () => {
-    try { await store.promoteMemory(state.currentWsId, state.selectedAgentId, b.dataset.id, state.user.uid); toast("🧠 승격했어요 — 답변에 우선 반영됩니다."); }
+    try { await store.promoteKnowledge(state.currentWsId, b.dataset.id, state.user.uid); toast("🧠 승격했어요 — 모든 에이전트가 우선 반영합니다."); }
     catch (e) { toast("승격 실패: " + (e.message || e)); }
   });
   ul.querySelectorAll(".mem-del").forEach((b) => b.onclick = async () => {
     try {
-      await store.deleteMemory(state.currentWsId, state.selectedAgentId, b.dataset.id);
-      await store.applyGrowth(state.currentWsId, state.selectedAgentId, { knowledgeDelta: -1 });
-      toast("기억을 삭제했어요.");
+      await store.deleteKnowledge(state.currentWsId, b.dataset.id);
+      toast("지식을 삭제했어요.");
     } catch (e) { toast("삭제 실패: " + (e.message || e)); }
   });
 }

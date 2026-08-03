@@ -1,0 +1,17 @@
+# Firebase 배포 캐시 (로컬 산출물)
+.firebase/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 의존성 (현재 미사용, 향후 대비)
+node_modules/
+
+# 로그·임시
+*.log
+*.tmp
+
+# 다른 프로젝트 문서 (팀원 실명·전략 포함, 공개 제외)
+AGENT24_*.md

@@ -195,7 +195,7 @@ export function listenChannels(wsId, cb) {
 
 // ---------- 메시지 ----------
 export async function sendMessage(wsId, chId, msg) {
-  await addDoc(collection(db, "workspaces", wsId, "channels", chId, "messages"), {
+  return addDoc(collection(db, "workspaces", wsId, "channels", chId, "messages"), {
     senderId: msg.senderId,
     senderType: msg.senderType, // 'user' | 'agent'
     senderName: msg.senderName,
@@ -456,17 +456,137 @@ export function listenMemories(wsId, agentId, cb) {
   return watch(q, (snap) => cb(snap.docs.map((d) => ({ id: d.id, ...d.data() }))));
 }
 
-// 컨텍스트 주입용 top-K — 워크스페이스 공동 지식에서 뽑는다(모든 에이전트 공유).
-// 🧠 승격 지식 우선, 남은 자리는 최신 자동 학습으로.
-export async function fetchTopMemories(wsId, agentId, k = 6) {
+// ===============================================================
+// 질문-연관 기억 회수 (전문가 패널 합의안 반영)
+// ---------------------------------------------------------------
+// 한국어는 조사 탓에 어절 매칭이 깨지므로(배포가/배포를) 음절 bigram으로
+// 흡수한다. 임계값 미달이면 승격·최신이어도 주입하지 않는다 — 무관 기억의
+// 프롬프트 오염이 flash급 모델 환각의 1순위 원인이기 때문.
+// ===============================================================
+
+// 한글은 음절 bigram, 영문/숫자는 토큰 통째로
+export function tokenizeGrams(text) {
+  const grams = new Set();
+  const norm = String(text || "").toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, " ");
+  for (const w of norm.split(/\s+/)) {
+    if (!w) continue;
+    if (/[가-힣]/.test(w)) {
+      if (w.length === 1) grams.add(w);
+      for (let i = 0; i < w.length - 1; i++) grams.add(w.slice(i, i + 2));
+    } else if (w.length > 1) grams.add(w);
+  }
+  return grams;
+}
+
+const RELEVANCE_GATE = 0.06;   // 이 미만이면 주입 금지 (골든셋으로 튜닝할 것)
+const RECENCY_HALF_LIFE_DAYS = 14;
+
+/**
+ * 컨텍스트 주입용 top-K — 워크스페이스 공동 지식에서 질문 연관도로 뽑는다.
+ * score = 0.65*연관도(IDF 가중 bigram 겹침) + 0.20*최근성 + 0.15*승격
+ * @returns {{texts:string[], meta:{ids:string[], scores:number[], topScore:number, miss:boolean, poolSize:number, mode:string}}}
+ */
+export async function fetchTopMemories(wsId, agentId, k = 6, queryText = "") {
   const q = query(
     collection(db, "workspaces", wsId, "knowledge"),
-    orderBy("createdAt", "desc"), limit(40)
+    orderBy("createdAt", "desc"), limit(100)
   );
   const snap = await getDocs(q);
-  const all = snap.docs.map((d) => d.data());
-  const promoted = all.filter((m) => m.promoted);
-  const auto = all.filter((m) => !m.promoted);
-  return [...promoted, ...auto].slice(0, k)
-    .map((m) => (m.promoted ? "[팀 승격] " : "") + m.content);
+  const all = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  const fmt = (m) => (m.promoted ? "[팀 승격] " : "") + m.content;
+
+  // 질문이 없으면(레거시 호출) 기존 동작: 승격 우선 → 최신
+  const qGrams = tokenizeGrams(queryText);
+  if (!qGrams.size) {
+    const pick = [...all.filter((m) => m.promoted), ...all.filter((m) => !m.promoted)].slice(0, k);
+    return { texts: pick.map(fmt), meta: { ids: pick.map((m) => m.id), scores: [], topScore: 0, miss: false, poolSize: all.length, mode: "recency" } };
+  }
+
+  // IDF-lite: 후보 풀 안에서 각 gram의 문서빈도 → "회의","팀" 같은 범용 gram 기여 축소
+  const docGrams = all.map((m) => tokenizeGrams(m.content));
+  const df = new Map();
+  for (const g of docGrams) for (const t of g) df.set(t, (df.get(t) || 0) + 1);
+  const N = Math.max(1, all.length);
+  const idf = (t) => Math.log(1 + N / (df.get(t) || 1));
+
+  let qWeight = 0;
+  for (const t of qGrams) qWeight += idf(t);
+
+  const now = Date.now();
+  const scored = all.map((m, i) => {
+    let hit = 0;
+    for (const t of qGrams) if (docGrams[i].has(t)) hit += idf(t);
+    const rel = qWeight ? hit / qWeight : 0;
+    const ageDays = m.createdAt?.seconds ? (now - m.createdAt.seconds * 1000) / 86400000 : 0;
+    const rec = Math.pow(0.5, ageDays / RECENCY_HALF_LIFE_DAYS);
+    const score = 0.65 * rel + 0.20 * rec + 0.15 * (m.promoted ? 1 : 0);
+    return { m, rel, score };
+  });
+
+  // 게이트: 연관도 미달은 후보에서 제외 — 억지로 k건 채우지 않는다
+  const passed = scored.filter((s) => s.rel >= RELEVANCE_GATE).sort((a, b) => b.score - a.score);
+  // 연관도 1위는 점수와 무관하게 보존(고연관-저최근 문서 보호)
+  const bestRel = scored.reduce((a, b) => (b.rel > a.rel ? b : a), scored[0]);
+  if (bestRel && bestRel.rel >= RELEVANCE_GATE && !passed.includes(bestRel)) passed.unshift(bestRel);
+
+  const pick = passed.slice(0, k);
+  return {
+    texts: pick.map((s) => fmt(s.m)),
+    meta: {
+      ids: pick.map((s) => s.m.id),
+      scores: pick.map((s) => Math.round(s.rel * 1000) / 1000),
+      topScore: pick.length ? pick[0].rel : 0,
+      miss: pick.length === 0,          // 회수 실패 — 계측 대상
+      poolSize: all.length,
+      mode: "relevance",
+    },
+  };
+}
+
+// ---------- 계측 (agent_answer 이벤트 1종) ----------
+// precision@1 = citedTop1 / (injected>0), TTA = ts→feedbackTs, miss율 등을 이 로그에서 산출
+export async function logAnswerMetric(wsId, data) {
+  try {
+    await addDoc(collection(db, "workspaces", wsId, "metrics"), {
+      type: "agent_answer", ts: serverTimestamp(),
+      thumbsUp: null, feedbackTs: null,
+      ...data,
+    });
+  } catch (e) { console.warn("metric log 실패(무시):", e.message); }
+}
+
+// 👍 시 해당 답변의 metric에 피드백 기록 (msgId로 조인)
+export async function attachFeedback(wsId, msgId) {
+  try {
+    const snap = await getDocs(query(
+      collection(db, "workspaces", wsId, "metrics"),
+      where("msgId", "==", msgId), limit(1)
+    ));
+    if (!snap.empty) await updateDoc(snap.docs[0].ref, { thumbsUp: true, feedbackTs: serverTimestamp() });
+  } catch (e) { console.warn("feedback 기록 실패(무시):", e.message); }
+}
+
+// 최근 7일 지표 집계 — /metrics 카드용
+export async function fetchMetricsSummary(wsId) {
+  const since = new Date(Date.now() - 7 * 86400000);
+  const snap = await getDocs(query(
+    collection(db, "workspaces", wsId, "metrics"),
+    orderBy("ts", "desc"), limit(300)
+  ));
+  const rows = snap.docs.map((d) => d.data())
+    .filter((r) => r.ts?.seconds && r.ts.seconds * 1000 >= since.getTime());
+  const n = rows.length;
+  const injected = rows.filter((r) => (r.injectedCount || 0) > 0);
+  const cited1 = injected.filter((r) => r.citedTop1).length;
+  const up = rows.filter((r) => r.thumbsUp === true);
+  const miss = rows.filter((r) => r.retrievalMiss).length;
+  const ttas = up.filter((r) => r.feedbackTs?.seconds).map((r) => r.feedbackTs.seconds - r.ts.seconds).sort((a, b) => a - b);
+  return {
+    answers: n,
+    thumbsUpRate: n ? up.length / n : 0,
+    precisionAt1: injected.length ? cited1 / injected.length : null,
+    missRate: n ? miss / n : 0,
+    medianTTAsec: ttas.length ? ttas[Math.floor(ttas.length / 2)] : null,
+    avgLatencyMs: n ? Math.round(rows.reduce((a, r) => a + (r.latencyMs || 0), 0) / n) : 0,
+  };
 }

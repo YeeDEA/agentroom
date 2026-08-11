@@ -173,6 +173,18 @@ service cloud.firestore {
         allow update, delete: if isWsMember(wsId);
       }
 
+      // ------------- metrics (신뢰 지표 계측: agent_answer 이벤트) -------------
+      match /metrics/{mid} {
+        allow read: if isWsMember(wsId);
+        allow create: if isWsMember(wsId) &&
+          request.resource.data.type == "agent_answer";
+        // 피드백 조인: thumbsUp/feedbackTs 만 사후 갱신 가능
+        allow update: if isWsMember(wsId) &&
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['thumbsUp', 'feedbackTs']);
+        allow delete: if false;
+      }
+
       // ------------- profiles (방별 프로필: 이모지/닉네임) -------------
       match /profiles/{pid} {
         allow read: if isWsMember(wsId);

@@ -720,6 +720,7 @@ $("messages").addEventListener("click", async (e) => {
   btn.disabled = true;
   try {
     await store.praiseMessage(state.currentWsId, state.currentChId, msgId);
+    store.attachFeedback(state.currentWsId, msgId); // 계측: TTA·👍율 (실패해도 무시)
     await awardExp(agentId, EXP.PRAISE, 0);
     flyBubble("👍");
   } catch (err) { console.error(err); }
@@ -883,7 +884,34 @@ const COMMANDS = [
   { name: "decisions", aliases: ["결정로그", "결정모음", "timeline", "log"], usage: "/decisions", desc: "decision log · 이 채널의 결정 모아보기", run: runDecisionLog },
   // 내보내기
   { name: "export", aliases: ["내보내기", "저장", "download", "dl"], usage: "/export [md|html|json|csv|txt]", desc: "channel to file · 대화·산출물 내보내기", run: (a) => { const k = (a || "").trim().toLowerCase(); if (exporter.FORMATS[k]) doExport(k); else openExportModal(); } },
+  // 신뢰 지표 (AI 불필요 — 계측 로그 집계)
+  { name: "metrics", aliases: ["지표", "품질", "stats"], usage: "/metrics", desc: "quality metrics · 최근 7일 에이전트 신뢰 지표", run: runMetricsCard },
 ];
+
+// 최근 7일 신뢰 지표 카드 — "수집만 하고 안 보는" 함정을 피하려 제품 안에 둔다
+async function runMetricsCard() {
+  toast("📊 최근 7일 지표 집계 중…");
+  try {
+    const s = await store.fetchMetricsSummary(state.currentWsId);
+    if (!s.answers) { toast("아직 계측된 답변이 없어요. 에이전트와 대화한 뒤 다시 시도하세요."); return; }
+    const pct = (v) => v == null ? "측정 전" : Math.round(v * 100) + "%";
+    await store.addDocCard(state.currentWsId, state.currentChId, {
+      title: "에이전트 신뢰 지표 (최근 7일)", emoji: "📊",
+      sections: [
+        { heading: "활동", items: [`답변 ${s.answers}건 · 평균 지연 ${(s.avgLatencyMs / 1000).toFixed(1)}초`] },
+        { heading: "회수 품질", items: [
+          `precision@1: ${pct(s.precisionAt1)} — 1순위로 뽑은 기억이 실제 답변 근거로 쓰인 비율`,
+          `회수 실패율: ${pct(s.missRate)} — 관련 기억을 하나도 못 찾은 질문 비율`,
+        ] },
+        { heading: "팀 만족", items: [
+          `👍 비율: ${pct(s.thumbsUpRate)}`,
+          `신뢰 답변 도달 시간(TTA): ${s.medianTTAsec == null ? "측정 전 (👍가 쌓여야 산출)" : s.medianTTAsec + "초 (중앙값)"}`,
+        ] },
+        { heading: "읽는 법", items: ["precision@1은 LLM 자기보고 기반이라 실제보다 후하게 나옵니다. 절대값보다 주 단위 추세로 보세요."] },
+      ],
+    });
+  } catch (e) { toast("지표 집계 실패: " + (e.message || e)); }
+}
 
 // 결정 타임라인 — 팀 기억의 본질은 "우리가 뭘 결정했나"
 async function runDecisionLog() {
@@ -934,6 +962,23 @@ async function produceDoc(emoji, instruction, loadingMsg) {
 function splitIdeas(text) {
   return String(text || "").split(/\n+/).map((s) => s.replace(/^[\s\-*\d.)·•]+/, "").trim()).filter((s) => s.length > 3).slice(0, 5);
 }
+// 계측: 답변 1건 = agent_answer 이벤트 1건 (지연·주입·인용·피드백을 한 문서에)
+function recordAnswerMetric({ wsId, agent, ref, res, retrieval, t0 }) {
+  const cited = (res.sources || []).filter((n) => n >= 1 && n <= retrieval.meta.ids.length);
+  store.logAnswerMetric(wsId, {
+    agentId: agent.id, channelId: state.currentChId, msgId: ref?.id || null,
+    latencyMs: Math.round(performance.now() - t0),
+    injectedCount: retrieval.texts.length,
+    injectedIds: retrieval.meta.ids, injectedScores: retrieval.meta.scores,
+    topScore: retrieval.meta.topScore,
+    retrievalMiss: retrieval.meta.miss, retrievalMode: retrieval.meta.mode,
+    poolSize: retrieval.meta.poolSize,
+    citedIds: cited.map((n) => retrieval.meta.ids[n - 1]),
+    citedTop1: cited.includes(1),
+    ok: !!res.ok,
+  });
+}
+
 async function agentSpeak(agent, userText, awardAnswer = true) {
   const wsId = state.currentWsId, chId = state.currentChId;
   const hue = agent.hue ?? hueFrom(agent.name);
@@ -941,11 +986,14 @@ async function agentSpeak(agent, userText, awardAnswer = true) {
   renderMessages();
   let res = null;
   try {
-    const memories = await store.fetchTopMemories(wsId, agent.id, 4);
+    const t0 = performance.now();
+    const retrieval = await store.fetchTopMemories(wsId, agent.id, 4, userText);
+    const memories = retrieval.texts;
     const recent = state.messages.slice(-8).map((m) => ({ senderName: m.senderName, content: m.content }));
     res = await ai.respond({ agent, memories, recent, userName: meName(), userText, levelName: levelInfo(agent.level).name });
-    await store.sendMessage(wsId, chId, { senderId: agent.id, senderType: "agent", senderName: agent.name, content: res.reply, agentId: agent.id,
+    const ref = await store.sendMessage(wsId, chId, { senderId: agent.id, senderType: "agent", senderName: agent.name, content: res.reply, agentId: agent.id,
       sources: (res.sources || []).map((n) => String(memories[n - 1] || "").slice(0, 70)).filter(Boolean) });
+    recordAnswerMetric({ wsId, agent, ref, res, retrieval, t0 });
     if (res.ok && awardAnswer) await awardExp(agent.id, EXP.ANSWER, 0, 1);
   } catch (err) { console.error(err); }
   finally { state.pending = state.pending.filter((p) => p.id !== agent.id); renderMessages(); }
@@ -1032,7 +1080,7 @@ async function runEvaluate(arg) {
   const scores = [];
   for (const a of cas) {
     try {
-      const memories = await store.fetchTopMemories(state.currentWsId, a.id, 4);
+      const memories = (await store.fetchTopMemories(state.currentWsId, a.id, 4, arg)).texts;
       const r = await ai.score({ agent: a, memories, item: arg });
       if (r) { scores.push({ name: a.name, score: r.score, reason: r.reason }); await awardExp(a.id, EXP.ANSWER, 0, 1); }
     } catch (err) { console.error(err); }
@@ -1052,17 +1100,20 @@ async function triggerAgent(agent, userText) {
   state.pending.push({ id: agent.id, name: agent.name, hue, level: agent.level });
   renderMessages();
   try {
-    const memories = await store.fetchTopMemories(wsId, agent.id, 6);
+    const t0 = performance.now();
+    const retrieval = await store.fetchTopMemories(wsId, agent.id, 6, userText);
+    const memories = retrieval.texts;
     const recent = state.messages.slice(-12).map((m) => ({ senderName: m.senderName, content: m.content }));
     const res = await ai.respond({
       agent, memories, recent, userName: meName(), userText,
       levelName: levelInfo(agent.level).name,
     });
-    await store.sendMessage(wsId, chId, {
+    const ref = await store.sendMessage(wsId, chId, {
       senderId: agent.id, senderType: "agent", senderName: agent.name,
       content: res.reply, agentId: agent.id,
       sources: (res.sources || []).map((n) => String(memories[n - 1] || "").slice(0, 70)).filter(Boolean),
     });
+    recordAnswerMetric({ wsId, agent, ref, res, retrieval, t0 });
     if (res.ok) {
       let learnedDelta = 0;
       if (res.learned) {
@@ -1098,7 +1149,7 @@ async function runRoundtable(participants, topic, userText) {
     state.pending.push({ id: agent.id, name: agent.name, hue, level: agent.level });
     renderMessages();
     try {
-      const memories = await store.fetchTopMemories(wsId, agent.id, 5);
+      const memories = (await store.fetchTopMemories(wsId, agent.id, 5, `${topic || ""} ${userText || ""}`)).texts;
       const others = participants.filter((a) => a.id !== agent.id).map((a) => a.name);
       const res = await ai.respond({
         agent, memories, recent: baseRecent, userName: meName(), userText,

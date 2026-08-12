@@ -556,9 +556,11 @@ export async function fetchTopMemories(wsId, agentId, k = 6, queryText = "") {
 
   // 게이트: 연관도 미달은 후보에서 제외 — 억지로 k건 채우지 않는다
   const passed = scored.filter((s) => s.rel >= RELEVANCE_GATE).sort((a, b) => b.score - a.score);
-  // 연관도 1위는 점수와 무관하게 보존(고연관-저최근 문서 보호)
+  // 연관도 1위는 완화 게이트(절반)로 구제 — 절대 게이트는 질문 표현이 조금만
+  // 바뀌어도("우리 MT" vs "MT") 경계에서 정답을 떨어뜨린다. 무관 질문은
+  // 1위조차 절반 게이트에 못 미치므로 miss 판정은 그대로 유지된다.
   const bestRel = scored.reduce((a, b) => (b.rel > a.rel ? b : a), scored[0]);
-  if (bestRel && bestRel.rel >= RELEVANCE_GATE && !passed.includes(bestRel)) passed.unshift(bestRel);
+  if (bestRel && bestRel.rel >= RELEVANCE_GATE / 2 && !passed.includes(bestRel)) passed.unshift(bestRel);
 
   const pick = passed.slice(0, k);
   return {

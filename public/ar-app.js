@@ -965,7 +965,93 @@ const COMMANDS = [
   { name: "export", aliases: ["내보내기", "저장", "download", "dl"], usage: "/export [md|html|json|csv|txt]", desc: "channel to file · 대화·산출물 내보내기", run: (a) => { const k = (a || "").trim().toLowerCase(); if (exporter.FORMATS[k]) doExport(k); else openExportModal(); } },
   // 신뢰 지표 (AI 불필요 — 계측 로그 집계)
   { name: "metrics", aliases: ["지표", "품질", "stats"], usage: "/metrics", desc: "quality metrics · 최근 7일 에이전트 신뢰 지표", run: runMetricsCard },
+  // 카톡 백필 — 과거 대화를 팀 지식으로
+  { name: "import", aliases: ["백필", "카톡", "kakao", "가져오기"], usage: "/import", desc: "KakaoTalk backfill · 카톡 내보내기(.txt)를 팀 지식으로", run: openImportModal },
 ];
+
+// ===============================================================
+// 카톡 백필 — "3월에 작년 카톡을 붓고, 5분 뒤 근거 달린 답을 받는다"
+// 카카오톡 '대화 내보내기' txt를 파싱 → LLM이 결정·기한·역할만 선별
+// 추출 → 공동 지식으로 저장(PII는 addKnowledge의 maskPII가 자동 마스킹).
+// 전량 요약은 하지 않는다(쿼터·노이즈) — 청크당 최대 3개만 선별.
+// ===============================================================
+function parseKakaoExport(raw) {
+  const msgs = [];
+  const SKIP = /(님이 들어왔습니다|님이 나갔습니다|^사진$|^동영상$|^이모티콘$|삭제된 메시지입니다|^파일:)/;
+  // PC: [이름] [오후 8:31] 내용 / 모바일: 2024년 3월 2일 오후 8:31, 이름 : 내용 (iOS는 2024. 3. 2.)
+  const rePC = /^\[(.+?)\]\s*\[(?:오전|오후)?\s*[\d:]+\]\s*(.+)$/;
+  const reMob = /^\d{4}(?:년|\.)\s*\d{1,2}(?:월|\.)\s*\d{1,2}(?:일|\.)?\s*(?:오전|오후)?\s*[\d:]+\s*,\s*(.+?)\s*:\s*(.+)$/;
+  for (const line of String(raw).split(/\r?\n/)) {
+    const t = line.trim();
+    if (!t || /^-{3,}/.test(t) || /^\d{4}(?:년|\.)\s*\d{1,2}(?:월|\.)\s*\d{1,2}/.test(t) && !t.includes(",")) {
+      if (!rePC.test(t) && !reMob.test(t)) continue;
+    }
+    let m = t.match(rePC) || t.match(reMob);
+    if (m) {
+      const who = m[1].trim(), text = m[2].trim();
+      if (!SKIP.test(text)) msgs.push({ who, text });
+    } else if (msgs.length && t) {
+      msgs[msgs.length - 1].text += " " + t; // 여러 줄 메시지 이어붙이기
+    }
+  }
+  return msgs;
+}
+
+async function openImportModal() {
+  if (!state.currentWsId || !state.currentChId) { toast("먼저 채널을 선택하세요."); return; }
+  openModal(`
+    <h3>📥 카톡 백필</h3>
+    <p class="sub">카카오톡 채팅방 → 설정 → <b>대화 내용 내보내기(.txt)</b> 파일을 올리거나 내용을 붙여넣으세요.
+    과거 대화에서 <b>결정·일정·역할·규칙만 선별</b>해 팀 지식으로 등록합니다(잡담 제외, 개인정보 자동 마스킹).</p>
+    <input type="file" id="imp-file" accept=".txt" style="margin-bottom:8px" />
+    <textarea id="imp-text" rows="7" placeholder="또는 여기에 카톡 내보내기 내용을 붙여넣기…" style="width:100%;background:var(--bg);border:1px solid var(--line);color:var(--txt);border-radius:10px;padding:10px;font-size:12px;font-family:inherit"></textarea>
+    <p class="sub" id="imp-status" style="margin:8px 0 0"></p>
+    <div class="modal-actions">
+      <button class="btn" id="imp-cancel">취소</button>
+      <button class="btn btn-primary" id="imp-run">지식으로 변환</button>
+    </div>`);
+  $("imp-cancel").onclick = closeModal;
+  $("imp-file").onchange = async () => {
+    const f = $("imp-file").files[0];
+    if (f) $("imp-text").value = await f.text();
+  };
+  $("imp-run").onclick = async () => {
+    const raw = $("imp-text").value;
+    const msgs = parseKakaoExport(raw);
+    const status = $("imp-status");
+    if (!msgs.length) { status.textContent = "⚠️ 카톡 내보내기 형식을 인식하지 못했어요. PC/모바일 내보내기 txt인지 확인해 주세요."; return; }
+    $("imp-run").disabled = true;
+    // 30개씩 묶어 LLM 선별 추출 — 쿼터 보호를 위해 최대 12청크(직렬 큐가 페이싱)
+    const CHUNK = 30, MAX_CHUNKS = 12;
+    const chunks = [];
+    for (let i = 0; i < msgs.length && chunks.length < MAX_CHUNKS; i += CHUNK)
+      chunks.push(msgs.slice(i, i + CHUNK));
+    const skipped = msgs.length - chunks.length * CHUNK;
+    const wsId = state.currentWsId, chId = state.currentChId;
+    let saved = 0;
+    for (let c = 0; c < chunks.length; c++) {
+      status.textContent = `⏳ 분석 중… ${c + 1}/${chunks.length} 묶음 (지식 ${saved}개 발견)`;
+      const convo = chunks[c].map((m) => `${m.who}: ${m.text}`).join("\n");
+      const facts = await ai.extractFacts(convo);
+      for (const f of facts) {
+        await store.addKnowledge(wsId, { content: f, sourceChannelId: chId, learnedFrom: "카톡 백필" });
+        saved++;
+      }
+    }
+    await store.addDocCard(wsId, chId, {
+      title: "카톡 백필 완료", emoji: "📥",
+      sections: [
+        { heading: "결과", items: [
+          `메시지 ${msgs.length}건 분석 → 지식 ${saved}개 등록`,
+          ...(skipped > 0 ? [`쿼터 보호를 위해 ${skipped}건은 이번에 건너뛰었어요 (다시 /import로 이어서 가능)`] : []),
+        ] },
+        { heading: "다음", items: ["이제 에이전트에게 과거 일을 물어보세요 — 🧠 근거와 함께 답합니다. 📚 팀 위키에서도 확인할 수 있어요."] },
+      ],
+    });
+    closeModal();
+    toast(`📥 백필 완료 — 지식 ${saved}개 등록`);
+  };
+}
 
 // 최근 7일 신뢰 지표 카드 — "수집만 하고 안 보는" 함정을 피하려 제품 안에 둔다
 async function runMetricsCard() {

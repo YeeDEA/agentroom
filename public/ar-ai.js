@@ -344,3 +344,23 @@ STRICT JSON만 출력(코드펜스 금지): {"score": 1에서 10 사이 정수, 
     return null;
   }
 }
+
+// 카톡 백필: 대화 청크에서 팀이 기억할 가치가 있는 지식만 추출
+// (전량 요약이 아니라 선별 추출 — 잡담은 버린다)
+export async function extractFacts(convoText) {
+  try {
+    const text = await callLLM(
+`아래는 어떤 팀의 카카오톡 대화 일부다. 팀이 앞으로도 기억할 가치가 있는 것만 골라라:
+결정된 사항, 확정된 일정/기한, 역할 분담, 규칙/정책, 중요한 사실.
+인사·잡담·이모티콘 반응은 제외. 각 항목은 맥락 없이 읽어도 이해되게 한국어 한 문장으로.
+없으면 빈 배열.
+
+[대화]
+${convoText}
+
+반드시 아래 STRICT JSON만 출력하라(코드펜스 금지):
+{"facts": ["지식 한 문장", ...]}  (최대 3개)`);
+    const p = parseJson(text);
+    return Array.isArray(p?.facts) ? p.facts.filter((f) => typeof f === "string" && f.trim()).slice(0, 3) : [];
+  } catch (_) { return []; }
+}

@@ -1008,13 +1008,17 @@ function paletteNav(pal, e, enterSelects) {
   if (e.key === "Escape") { pal.hidden = true; return true; }
   return false;
 }
-input.addEventListener("keydown", (e) => {
-  const mpal = $("mention-palette");
-  if (mpal && !mpal.hidden && paletteNav(mpal, e, true)) return; // 멘션: Enter=선택 (전송 아님)
-  const pal = $("cmd-palette");
-  if (pal && !pal.hidden && paletteNav(pal, e, false)) return;
-  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("composer").requestSubmit(); }
-});
+// 가드: 모듈이 두 번 평가되더라도 keydown 핸들러가 중복 등록되지 않게(방향키 2칸 이동 방지)
+if (!input.__navBound) {
+  input.__navBound = true;
+  input.addEventListener("keydown", (e) => {
+    const mpal = $("mention-palette");
+    if (mpal && !mpal.hidden && paletteNav(mpal, e, true)) return; // 멘션: Enter=선택 (전송 아님)
+    const pal = $("cmd-palette");
+    if (pal && !pal.hidden && paletteNav(pal, e, false)) return;
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("composer").requestSubmit(); }
+  });
+}
 input.addEventListener("blur", () => setTimeout(() => {
   const p = $("cmd-palette"); if (p) p.hidden = true;
   const mp = $("mention-palette"); if (mp) mp.hidden = true;
@@ -1051,7 +1055,8 @@ function updateMentionPalette() {
   ).join("");
   pal.hidden = false;
   pal.querySelectorAll("canvas[data-hue]").forEach((cv) => drawPet(cv, +cv.dataset.level || 1, +cv.dataset.hue || 265));
-  pal.querySelectorAll(".cmd-item").forEach((el) => el.onclick = () => applyMention(el.dataset.name));
+  // mousedown+preventDefault: 클릭 시 input이 blur돼 팔레트가 먼저 닫히는 걸 막는다
+  pal.querySelectorAll(".cmd-item").forEach((el) => el.onmousedown = (ev) => { ev.preventDefault(); applyMention(el.dataset.name); });
 }
 
 function applyMention(name) {
@@ -1392,7 +1397,8 @@ function updateCmdPalette() {
   if (!matches.length) { pal.hidden = true; return; }
   pal.innerHTML = matches.map((c, i) => `<div class="cmd-item${i === 0 ? " active" : ""}" data-name="${c.name}"><code>${esc(c.usage)}</code><span>${esc(c.desc)}</span>${tagBadge(c.tag)}</div>`).join("");
   pal.hidden = false;
-  pal.querySelectorAll(".cmd-item").forEach((el) => el.onclick = () => {
+  pal.querySelectorAll(".cmd-item").forEach((el) => el.onmousedown = (ev) => {
+    ev.preventDefault(); // blur로 팔레트가 먼저 닫히는 것 방지
     const c = COMMANDS.find((x) => x.name === el.dataset.name);
     input.value = "/" + c.name + (c.arg ? " " : "");
     hideCmdPalette(); input.focus();

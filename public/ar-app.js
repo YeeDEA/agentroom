@@ -356,7 +356,24 @@ function startWorkspaces() {
 
 // 워크스페이스 스와치 — 글자 없이 팔레트 파생 색 + 기하 마크(무늬로 구분)
 const WS_TINTS = ["#2e6e4e", "#b5734a", "#4a6b8a", "#8a5a7a", "#a07908", "#3f7d78"];
-function wsHash(s) { let h = 0; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; }
+function wsHash(s) { let h = 2166136261; for (const c of String(s)) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619) >>> 0; } return h; }
+
+// Identicon: 이름 해시로 5×5 좌우대칭 문양 SVG 생성 (방마다 고유·규칙적, GitHub 방식)
+function identiconSVG(name, tint) {
+  let h = wsHash(name);
+  const next = () => { h ^= h << 13; h ^= h >>> 17; h ^= h << 5; h >>>= 0; return h; };
+  const cells = [];
+  for (let col = 0; col < 3; col++) {
+    for (let row = 0; row < 5; row++) {
+      if (next() % 2 === 0) { // 50% 채움
+        cells.push([col, row]);
+        if (col < 2) cells.push([4 - col, row]); // 좌우 대칭
+      }
+    }
+  }
+  const rects = cells.map(([c, r]) => `<rect x="${c * 4}" y="${r * 4}" width="4" height="4"/>`).join("");
+  return `<svg viewBox="0 0 20 20" width="22" height="22" fill="currentColor" shape-rendering="crispEdges" style="color:${tint}">${rects}</svg>`;
+}
 function renderWsRail() {
   const rail = $("ws-rail");
   rail.innerHTML = "";
@@ -364,16 +381,9 @@ function renderWsRail() {
     const b = document.createElement("button");
     const active = ws.id === state.currentWsId;
     b.className = "ws-icon" + (active ? " is-active" : "");
-    const h = wsHash(ws.name);
-    const tint = WS_TINTS[h % WS_TINTS.length];
-    const shape = h % 3; // 0 원 / 1 사각 / 2 삼각 — 색이 비슷해도 무늬로 구별
+    const tint = WS_TINTS[wsHash(ws.name) % WS_TINTS.length];
     b.style.setProperty("--tint", tint);
-    const mark = shape === 0
-      ? `<circle cx="12" cy="12" r="5.5"/>`
-      : shape === 1
-        ? `<rect x="6.5" y="6.5" width="11" height="11" rx="2.5"/>`
-        : `<path d="M12 6l6 11H6z"/>`;
-    b.innerHTML = `<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">${mark}</svg>`;
+    b.innerHTML = identiconSVG(ws.name, active ? "#ffffff" : tint);
     b.title = ws.name;
     b.onclick = () => selectWorkspace(ws.id);
     rail.appendChild(b);
@@ -745,7 +755,19 @@ function docHtml(m) {
   const secs = (d.sections || []).map((s) =>
     `<div class="doc-sec"><div class="doc-h">${esc(s.heading)}</div>${(s.items || []).length ? `<ul>${s.items.map((i) => `<li>${esc(i)}</li>`).join("")}</ul>` : ""}</div>`
   ).join("");
-  return `<div class="summary-card doc-card"><h4>${esc(d.emoji || "📋")} ${esc(d.title || "")} <span class="sc-time">${fmtTime(m.createdAt)}</span></h4>${secs}</div>`;
+  // 서류/인덱스 카드: 제목 앞 이모지를 왼쪽 색 탭으로 변환, 종류별 색
+  const tab = docTabColor(d.emoji, d.title);
+  return `<div class="summary-card doc-card" style="--tab:${tab}"><h4>${esc(d.title || "")} <span class="sc-time">${fmtTime(m.createdAt)}</span></h4>${secs}</div>`;
+}
+// 카드 제목 이모지/키워드 → 인덱스 탭 색 (팔레트 파생)
+function docTabColor(emoji, title) {
+  const t = (emoji || "") + (title || "");
+  if (/📥|백필|가져오/.test(t)) return "#4a6b8a";      // 백필 = 슬레이트
+  if (/📊|지표|metrics|신뢰/.test(t)) return "#a07908";  // 지표 = 골드
+  if (/🤝|회의|discuss|결론/.test(t)) return "#8a5a7a";  // 회의 = 플럼
+  if (/🧵|요약|summary/.test(t)) return "#b5734a";       // 요약 = 클레이
+  if (/🆕|안내|가이드|환영|👋/.test(t)) return "#3f7d78"; // 안내 = 청록
+  return "#2e6e4e";                                      // 기본 = 진초록
 }
 
 function msgHtml(m) {

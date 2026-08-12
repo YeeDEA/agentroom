@@ -748,3 +748,23 @@ body { letter-spacing: -0.011em; }
 .btn-primary { box-shadow: 0 1px 2px rgba(46,110,78,.2); }
 .head-btn { transition: border-color var(--t-click), color var(--t-click), background var(--t-click); }
 .head-btn:active { transform: translateY(1px); }
+
+/* ================================================================
+   V6 — 서류/인덱스 카드 (왼쪽 색 탭 = 종류 구분) + identicon 방 아이콘
+   ================================================================ */
+/* 인덱스 카드: 종이 위 왼쪽 색 탭, 섹션 헤더에 탭 색 점 */
+.summary-card.doc-card {
+  --tab: var(--accent);
+  background: var(--bg-2); border: 1px solid var(--line); border-left: 4px solid var(--tab);
+  border-radius: 3px 12px 12px 3px; box-shadow: 1px 2px 0 rgba(0,0,0,.03), 2px 6px 16px rgba(40,36,20,.07);
+  padding: 16px 18px; position: relative; }
+.summary-card.doc-card h4 { color: var(--txt); font-size: 15px; font-weight: 800;
+  letter-spacing: -.01em; border-bottom: 1px solid var(--line); padding-bottom: 10px; margin-bottom: 12px; }
+.summary-card.doc-card .doc-h { color: var(--tab); font-size: 12px; font-weight: 800;
+  letter-spacing: .01em; display: flex; align-items: center; gap: 6px; }
+.summary-card.doc-card .doc-h::before { content: ""; width: 6px; height: 6px; border-radius: 2px;
+  background: var(--tab); flex: 0 0 auto; }
+.summary-card.doc-card .doc-sec { margin-top: 14px; }
+.summary-card.doc-card li { color: var(--txt-dim); line-height: 1.7; }
+/* identicon: 픽셀 문양 또렷하게 */
+.ws-rail .ws-icon svg { display: block; }

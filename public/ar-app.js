@@ -139,7 +139,13 @@ $("suggest-btn").onclick = async () => {
   const agents = channelAgents();
   const firstAgent = agents[0]?.name || "가이드봇";
   let list = [];
-  try {
+  // 방금 답변에 후속 질문이 실려 있으면 그것부터 — LLM 호출 없이 즉시, 맥락도 정확
+  const lastAgentMsg = [...state.messages].reverse().find((m) => m.senderType === "agent" && Array.isArray(m.followups) && m.followups.length);
+  if (lastAgentMsg) {
+    const who = lastAgentMsg.senderName || firstAgent;
+    list = lastAgentMsg.followups.map((q) => (q.startsWith("@") ? q : `@${who} ${q}`));
+  }
+  if (!list.length) try {
     const retrieval = await store.fetchTopMemories(state.currentWsId, null, 8, "", { pro: true });
     list = await ai.suggestQuestions({ knowledge: retrieval.texts, agentNames: agents.map((a) => a.name) });
   } catch (_) {}
@@ -637,7 +643,7 @@ function renderMessages() {
           <p class="empty-start-sub">사이드바의 <b>＋ 에이전트</b>를 누르면 이 채널에서 함께 일할 AI 팀원이 생깁니다.</p>
         </div>`;
   }
-  for (let i = 0; i < state.messages.length; i++) html += msgHtml(state.messages[i], i === state.messages.length - 1 && !state.pending.length);
+  for (const m of state.messages) html += msgHtml(m);
   for (const p of state.pending) html += thinkingHtml(p);
   box.innerHTML = html;
   const es = box.querySelector("#empty-suggest");
@@ -721,7 +727,7 @@ function docHtml(m) {
   return `<div class="summary-card doc-card"><h4>${esc(d.emoji || "📋")} ${esc(d.title || "")} <span class="sc-time">${fmtTime(m.createdAt)}</span></h4>${secs}</div>`;
 }
 
-function msgHtml(m, isLast = false) {
+function msgHtml(m) {
   if (m.senderType === "system" || m.kind === "summary") {
     if (m.kind === "diagram") return diagramHtml(m);
     if (m.kind === "scores") return scoresHtml(m);
@@ -764,13 +770,11 @@ function msgHtml(m, isLast = false) {
   const srcs = isAgent && Array.isArray(m.sources) && m.sources.length
     ? `<div class="msg-sources">🧠 근거: ${m.sources.map((s, i) => `<span class="src-link" data-kid="${esc((m.sourceKids || [])[i] || "")}" title="클릭하면 원본 지식·출처로 이동">${esc(s)}</span>`).join(" · ")}</div>`
     : (isAgent && m.agentId ? `<div class="msg-nosrc">일반 지식으로 답변 — 팀 기억 미사용</div>` : "");
-  const fups = isLast && isAgent && Array.isArray(m.followups) && m.followups.length
-    ? `<div class="followups">${m.followups.map((q) => `<button class="followup-chip" data-q="${esc(q)}">${esc(q)}</button>`).join("")}</div>` : "";
   const hib = isAgent && m.hibernated
     ? `<div class="msg-hibernate" data-n="${m.hibernated}">❄️ 잠든 기억 ${m.hibernated}개가 이 질문에 답할 수 있었어요 — <b>깨우기</b></div>` : "";
   return `<div class="msg${mine ? " mine" : ""}${m.promotedToMemory ? " promoted-msg" : ""}" data-msg-id="${m.id}">${ava}<div class="msg-body">
     <div class="msg-top"><span class="msg-name ${isAgent ? "agent" : ""}${mine ? " me" : ""}">${esc(dispName)}</span>${badge}<span class="msg-time">${fmtTime(m.createdAt)}</span>${m.promotedToMemory ? `<span class="promoted-chip">🧠 팀 기억</span>` : ""}</div>
-    ${m.content ? `<div class="msg-text">${highlightMentions(m.content)}</div>` : ""}${img}${srcs}${hib}${praise}${fups}</div>${del}</div>`;
+    ${m.content ? `<div class="msg-text">${highlightMentions(m.content)}</div>` : ""}${img}${srcs}${hib}${praise}</div>${del}</div>`;
 }
 
 function thinkingHtml(p) {
@@ -842,15 +846,6 @@ $("messages").addEventListener("click", async (e) => {
     }
     try { await store.deleteMessage(state.currentWsId, state.currentChId, delBtn.dataset.msg); toast("메시지를 삭제했어요."); }
     catch (err) { toast("삭제 실패: " + (err.message || err)); }
-    return;
-  }
-  // 후속 질문 칩 → 입력창 채움 (전송은 사용자 몫)
-  const fup = e.target.closest(".followup-chip");
-  if (fup) {
-    const agentName = fup.closest(".msg")?.querySelector(".msg-name")?.textContent || "";
-    const q = fup.dataset.q || "";
-    $("composer-input").value = q.startsWith("@") ? q : (agentName ? `@${agentName} ${q}` : q);
-    $("composer-input").focus();
     return;
   }
   // ❄️ 동면 배지 클릭 → 업그레이드 모달

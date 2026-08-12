@@ -260,6 +260,18 @@ button { font-family: inherit; }
 .mem-badge.p { background: var(--lime-soft); color: var(--lime); }
 .mem-badge.mask { background: var(--bg-4); color: var(--gold); cursor: help; }
 .mem-badge.low { background: var(--bg-4); color: var(--danger); cursor: help; }
+/* 팀 위키 모달 */
+.wiki-count { font-size: 13px; color: var(--txt-mute); font-weight: 600; }
+.wiki-contribs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.wiki-contrib { font-size: 11px; background: var(--bg-3); border: 1px solid var(--line);
+  border-radius: 999px; padding: 3px 10px; color: var(--txt-dim); }
+.wiki-contrib b { color: var(--accent-2); }
+.wiki-search { width: 100%; background: var(--bg); border: 1px solid var(--line); color: var(--txt);
+  padding: 9px 12px; border-radius: 10px; font-size: 13px; margin-bottom: 10px; }
+.wiki-search:focus { outline: none; border-color: var(--accent); }
+.wiki-list { max-height: 44vh; overflow: auto; }
+/* 팀 기억 미사용 배지 — 각주 없는 답변의 투명성 */
+.msg-nosrc { margin-top: 4px; font-size: 10.5px; color: var(--txt-mute); opacity: .8; }
 /* 👎 버튼 — 👍 옆, 톤 낮게 */
 .scold-btn { background: transparent; border: 1px solid var(--line); border-radius: 8px;
   padding: 3px 8px; font-size: 12px; cursor: pointer; color: var(--txt-mute); margin-left: 6px; }

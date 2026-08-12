@@ -111,7 +111,16 @@ async function callHermes(cfg, prompt, useJsonFormat = true) {
 }
 
 // 통합 진입점 — 모든 AI 기능이 이 함수만 호출한다
-async function callLLM(prompt) {
+// 전역 직렬 큐 — 동시 호출이 무료 RPM을 넘어 후반 에이전트가 전부 사과문을
+// 백는 데모 사망 시나리오 방지. 호출 사이 1.2초 간격.
+let llmChain = Promise.resolve();
+function callLLM(prompt) {
+  const run = llmChain.then(() => callLLMNow(prompt));
+  llmChain = run.catch(() => {}).then(() => new Promise((r) => setTimeout(r, 1200)));
+  return run;
+}
+
+async function callLLMNow(prompt) {
   const cfg = getBrainConfig();
   if (cfg.provider === "hermes" && cfg.apiKey) {
     try { return await callHermes(cfg, prompt); }

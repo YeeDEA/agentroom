@@ -642,7 +642,8 @@ function msgHtml(m) {
     : "";
   // 🧠 근거 각주: 에이전트가 실제로 활용한 팀 학습 지식 표시 (신뢰 + "진짜 기억한다" 증명)
   const srcs = isAgent && Array.isArray(m.sources) && m.sources.length
-    ? `<div class="msg-sources">🧠 근거: ${m.sources.map((s) => `<span>${esc(s)}</span>`).join(" · ")}</div>` : "";
+    ? `<div class="msg-sources">🧠 근거: ${m.sources.map((s) => `<span>${esc(s)}</span>`).join(" · ")}</div>`
+    : (isAgent && m.agentId ? `<div class="msg-nosrc">일반 지식으로 답변 — 팀 기억 미사용</div>` : "");
   return `<div class="msg${mine ? " mine" : ""}">${ava}<div class="msg-body">
     <div class="msg-top"><span class="msg-name ${isAgent ? "agent" : ""}${mine ? " me" : ""}">${esc(dispName)}</span>${badge}<span class="msg-time">${fmtTime(m.createdAt)}</span></div>
     ${m.content ? `<div class="msg-text">${highlightMentions(m.content)}</div>` : ""}${img}${srcs}${praise}</div>${del}</div>`;
@@ -1130,7 +1131,7 @@ async function triggerAgent(agent, userText) {
         await store.addKnowledge(wsId, { content: res.learned, sourceChannelId: chId,
           sourceAgentId: agent.id, sourceAgentName: agent.name, learnedFrom: meName() });
         learnedDelta = 1;
-        toast(`🧠 ${agent.name}이(가) 새로운 걸 배웠어요!`);
+        toast(`🧠 ${agent.name} 학습: ${String(res.learned).slice(0, 40)}${res.learned.length > 40 ? "…" : ""}`);
       }
       await awardExp(agent.id, EXP.ANSWER + (res.learned ? EXP.LEARN : 0), learnedDelta, 1);
     }
@@ -1150,6 +1151,7 @@ async function triggerAgent(agent, userText) {
 
 // 🤝 원탁회의(부가 기능) — 여러 에이전트가 순서대로 서로를 보고 토론 → 결론 카드
 async function runRoundtable(participants, topic, userText) {
+  if (participants.length > 4) { toast("쿼터 보호를 위해 회의는 4명까지만 참여해요."); participants = participants.slice(0, 4); }
   const wsId = state.currentWsId, chId = state.currentChId;
   const soFar = [];
   toast(`🤝 원탁회의 시작 — ${participants.map((a) => a.name).join(", ")}`);
@@ -1443,6 +1445,52 @@ function openWorkspaceModal() {
     } catch (err) { toast(err.message || "참여 실패 — 코드를 확인하세요."); $("join-ws-go").disabled = false; }
   };
 }
+
+// 📚 팀 위키 — 공동 기억력(LLM 위키)을 일급 화면으로: 검색 + 전체 지식 + 에이전트별 기여
+$("ws-wiki-btn").onclick = async () => {
+  if (!state.currentWsId) { toast("먼저 워크스페이스를 선택하세요."); return; }
+  let list = [];
+  try {
+    list = await new Promise((resolve) => {
+      const un = store.listenKnowledge(state.currentWsId, (l) => { un && un(); resolve(l); });
+    });
+  } catch (_) {}
+  const chName = (id) => (state.channels.find((c) => c.id === id) || {}).name;
+  // 에이전트별 기여 집계 — "누가 팀 기억을 키우고 있나"
+  const byAgent = {};
+  for (const m of list) {
+    const who = m.sourceAgentName || (m.promotedBy ? "팀원 승격" : "출처 없음");
+    byAgent[who] = (byAgent[who] || 0) + 1;
+  }
+  const contrib = Object.entries(byAgent).sort((a, b) => b[1] - a[1])
+    .map(([who, n]) => `<span class="wiki-contrib">${esc(who)} <b>${n}</b></span>`).join("");
+  const row = (m) => {
+    const src = [];
+    if (m.sourceAgentName) src.push(`🤖 ${esc(m.sourceAgentName)}`);
+    if (chName(m.sourceChannelId)) src.push(`# ${esc(chName(m.sourceChannelId))}`);
+    if (m.learnedFrom) src.push(`${esc(m.learnedFrom)}님 대화`);
+    return `<li class="mem-item${m.promoted ? " promoted" : ""}" data-t="${esc(m.content.toLowerCase())}">
+      <div class="mem-meta"><span class="mem-badge${m.promoted ? " p" : ""}">${m.promoted ? "🧠 승격" : "자동"}</span>
+      ${m.masked ? `<span class="mem-badge mask">🔒 마스킹</span>` : ""}
+      ${(m.trust || 0) <= -2 ? `<span class="mem-badge low">⚠️ 신뢰 낮음</span>` : ""}</div>
+      ${esc(m.content)}${src.length ? `<div class="mem-src">${src.join(" · ")}</div>` : ""}</li>`;
+  };
+  openModal(`
+    <h3>📚 팀 위키 <span class="wiki-count">${list.length}</span></h3>
+    <p class="sub">팀 대화에서 자동으로 배우거나 🧠로 승격한 지식입니다. 모든 에이전트가 이 하나의 위키로 답합니다.</p>
+    <div class="wiki-contribs">${contrib || "아직 지식이 없어요"}</div>
+    <input class="wiki-search" id="wiki-search" placeholder="지식 검색… (예: 밸류에이션, 가격)" autocomplete="off" />
+    <ul class="mem-list wiki-list" id="wiki-list">${list.map(row).join("") || `<li class="mem-empty">에이전트와 대화하면 지식이 쌓입니다.</li>`}</ul>
+    <div class="modal-actions"><button class="btn btn-primary" id="wiki-close">닫기</button></div>`);
+  $("wiki-close").onclick = closeModal;
+  $("wiki-search").oninput = () => {
+    const q = $("wiki-search").value.trim().toLowerCase();
+    $("wiki-list").querySelectorAll(".mem-item").forEach((li) => {
+      li.hidden = q && !li.dataset.t.includes(q);
+    });
+  };
+  $("wiki-search").focus();
+};
 
 $("ws-invite-btn").onclick = async () => {
   if (!state.currentWsId) return;

@@ -478,7 +478,9 @@ export function tokenizeGrams(text) {
   return grams;
 }
 
-const RELEVANCE_GATE = 0.06;   // 이 미만이면 주입 금지 (골든셋으로 튜닝할 것)
+// 골든셋 20문항 그리드서치 결과(2026-08-12): 0.06→0.12로 상향 시 p@1 78→83%
+// (recall@4 94%·무관질문 차단 100% 유지). 근거: docs/goldenset.md
+const RELEVANCE_GATE = 0.12;
 const RECENCY_HALF_LIFE_DAYS = 14;
 
 /**

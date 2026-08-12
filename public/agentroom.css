@@ -768,3 +768,24 @@ body { letter-spacing: -0.011em; }
 .summary-card.doc-card li { color: var(--txt-dim); line-height: 1.7; }
 /* identicon: 픽셀 문양 또렷하게 */
 .ws-rail .ws-icon svg { display: block; }
+
+/* ================================================================
+   V7 — 회의/시각화/평가 카드 통일 마감 + 승격→위키 비행 모션
+   ================================================================ */
+/* 인덱스 카드로 흡수된 특수 카드들의 잔여 스타일 정리 */
+.summary-card.doc-card .score-avg { font-size: 12px; color: var(--tab); font-weight: 800; margin-bottom: 8px; }
+.summary-card.doc-card .score-row { border-top-color: var(--line); }
+.summary-card.doc-card.diagram-card .mermaid-holder { margin-top: 10px; }
+
+/* 승격 → 팀 위키 비행 종이조각 */
+.fly-chip { position: fixed; z-index: 90; width: 16px; height: 20px; border-radius: 2px;
+  background: #fff9d6; box-shadow: 0 2px 6px rgba(40,36,20,.25); pointer-events: none;
+  animation: fly-wiki .62s cubic-bezier(.5,0,.4,1) forwards; }
+@keyframes fly-wiki {
+  0%   { transform: translate(0,0) rotate(-6deg) scale(1); opacity: 1; }
+  70%  { opacity: 1; }
+  100% { transform: translate(var(--dx), var(--dy)) rotate(120deg) scale(.25); opacity: 0; }
+}
+.wiki-pulse { animation: wiki-pop .5s var(--ez-out); }
+@keyframes wiki-pop { 0%,100% { transform: scale(1); } 40% { transform: scale(1.35); color: var(--accent); } }
+@media (prefers-reduced-motion: reduce) { .fly-chip { display: none; } }

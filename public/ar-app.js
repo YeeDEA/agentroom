@@ -70,6 +70,27 @@ function toast(msg, cls = "") {
   setTimeout(() => t.remove(), cls === "levelup" ? 4200 : 2600);
 }
 
+// 승격 = 대화가 팀 기억이 되는 순간을 눈으로: 메시지에서 📚 위키 버튼으로
+// 작은 종이조각이 포물선으로 날아가 흡수된다 ("대화 → 팀 지식" 시각화)
+function flyToWiki(fromEl) {
+  try {
+    const target = $("ws-wiki-btn");
+    if (!fromEl || !target) return;
+    const a = fromEl.getBoundingClientRect(), b = target.getBoundingClientRect();
+    const chip = document.createElement("div");
+    chip.className = "fly-chip";
+    chip.style.left = a.left + "px"; chip.style.top = a.top + "px";
+    chip.style.setProperty("--dx", (b.left + b.width / 2 - a.left) + "px");
+    chip.style.setProperty("--dy", (b.top + b.height / 2 - a.top) + "px");
+    document.body.appendChild(chip);
+    chip.addEventListener("animationend", () => {
+      chip.remove();
+      target.classList.add("wiki-pulse");
+      setTimeout(() => target.classList.remove("wiki-pulse"), 500);
+    });
+  } catch (_) {}
+}
+
 // 실행취소 버튼이 달린 토스트 — 5초 안에 누르면 undoFn 실행 (승격 되돌리기 등)
 function toastUndo(msg, undoFn, ms = 5000) {
   const t = document.createElement("div");
@@ -692,13 +713,13 @@ function summaryHtml(m) {
   let data = { points: [], issues: [] };
   try { data = JSON.parse(m.content); } catch (_) {}
   const isMeeting = m.kind === "meeting";
-  const title = isMeeting ? "🤝 회의 결론" : "🧵 대화 맥락 요약";
+  const title = isMeeting ? "회의 결론" : "대화 맥락 요약";
   const ptsLabel = isMeeting ? "합의/결정" : "";
   const pts = (data.points || []).map((p) => `<li>${esc(p)}</li>`).join("") || `<li>정리된 내용이 없습니다.</li>`;
   const iss = (data.issues || []).length
     ? `<div class="sc-issues-title">🔎 남은 쟁점</div><ul class="sc-issues">${data.issues.map((i) => `<li>${esc(i)}</li>`).join("")}</ul>`
     : "";
-  return `<div class="summary-card${isMeeting ? " meeting" : ""}"><h4>${title} <span class="sc-time">${fmtTime(m.createdAt)}</span></h4>${ptsLabel ? `<div class="sc-issues-title" style="color:var(--accent-2);margin-top:0">${ptsLabel}</div>` : ""}<ul>${pts}</ul>${iss}</div>`;
+  return `<div class="summary-card doc-card${isMeeting ? " meeting" : ""}" style="--tab:${isMeeting ? "#8a5a7a" : "#b5734a"}"><h4>${title} <span class="sc-time">${fmtTime(m.createdAt)}</span></h4>${ptsLabel ? `<div class="doc-h" style="margin-top:0">${ptsLabel}</div>` : ""}<ul>${pts}</ul>${iss}</div>`;
 }
 
 // ---- 시각화(mermaid) ----
@@ -720,7 +741,7 @@ function diagramHtml(m) {
   let d = { title: "시각화", code: "" };
   try { d = JSON.parse(m.content); } catch (_) {}
   const body = diagramCache[m.id] || `<div class="mmd-loading">그리는 중…</div>`;
-  return `<div class="summary-card diagram-card"><h4>📊 ${esc(d.title || "시각화")} <span class="sc-time">${fmtTime(m.createdAt)}</span></h4><div class="mermaid-holder" data-id="${esc(m.id)}" data-code="${esc(d.code || "")}">${body}</div></div>`;
+  return `<div class="summary-card doc-card diagram-card" style="--tab:#3f7d78"><h4>${esc(d.title || "시각화")} <span class="sc-time">${fmtTime(m.createdAt)}</span></h4><div class="mermaid-holder" data-id="${esc(m.id)}" data-code="${esc(d.code || "")}">${body}</div></div>`;
 }
 
 async function renderDiagrams() {
@@ -746,7 +767,7 @@ function scoresHtml(m) {
   const list = d.scores || [];
   const avg = list.length ? (list.reduce((a, b) => a + (b.score || 0), 0) / list.length).toFixed(1) : "-";
   const rows = list.map((s) => `<div class="score-row"><span class="score-name">${esc(s.name)}</span><span class="score-badge">${s.score}/10</span><span class="score-reason">${esc(s.reason || "")}</span></div>`).join("");
-  return `<div class="summary-card scores-card"><h4>⭐ 평가: ${esc(d.topic || "")} <span class="sc-time">${fmtTime(m.createdAt)}</span></h4><div class="score-avg">평균 ${avg} / 10</div>${rows}</div>`;
+  return `<div class="summary-card doc-card scores-card" style="--tab:#a07908"><h4>평가: ${esc(d.topic || "")} <span class="sc-time">${fmtTime(m.createdAt)}</span></h4><div class="score-avg">평균 ${avg} / 10</div>${rows}</div>`;
 }
 
 function docHtml(m) {
@@ -859,6 +880,7 @@ $("messages").addEventListener("click", async (e) => {
       for (const a of channelAgents()) await awardExp(a.id, EXP.LEARN, 1);
       await store.markMessagePromoted(state.currentWsId, state.currentChId, msg.id);
       store.logAhaOnce(state.currentWsId, state.user.uid, "first_promote");
+      flyToWiki(proBtn); // 승격된 메시지가 팀 위키(📚)로 날아가 붙는 모션 (피카소 안)
       const wsId = state.currentWsId, chId = state.currentChId;
       toastUndo("🧠 팀 지식으로 승격했어요.", async () => {
         await store.deleteKnowledge(wsId, kRef.id);

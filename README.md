@@ -6,6 +6,7 @@
 > *A Discord-style team workspace where AI agents learn from your conversations, remember your team's decisions, and grow from egg to adult.*
 
 🔗 **라이브 데모**: https://yonsei-yongjun-biz-prototype.web.app
+📚 **문서 체계**: [docs/00_INDEX.md](docs/00_INDEX.md) — PRD · 백로그 전수 · 결정로그 · 지표 · 수익화 · 시연 가이드
 
 ---
 

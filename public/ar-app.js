@@ -619,7 +619,7 @@ function msgHtml(m) {
         : `<div class="msg-ava user">${esc(firstGrapheme(dispName).toUpperCase())}</div>`);
   const badge = isAgent ? `<span class="msg-badge">AI</span>` : (mine ? `<span class="msg-badge me">나</span>` : "");
   const praise = isAgent && m.agentId
-    ? `<div class="msg-actions"><button class="praise-btn" data-msg="${m.id}" data-agent="${m.agentId}">👍 도움이 됐어요${m.reactions ? " · " + m.reactions : ""}</button></div>`
+    ? `<div class="msg-actions"><button class="praise-btn" data-msg="${m.id}" data-agent="${m.agentId}">👍 도움이 됐어요${m.reactions ? " · " + m.reactions : ""}</button><button class="scold-btn" data-msg="${m.id}" title="아쉬운 답변 — 이 답에 쓰인 기억의 신뢰도를 낮춥니다">👎</button></div>`
     : "";
   // 호버 툴바: 복사(모든 메시지) + 삭제(내 메시지, 보낸 지 5분 이내)
   const ageMs = m.createdAt && m.createdAt.seconds ? Date.now() - m.createdAt.seconds * 1000 : 0;
@@ -714,13 +714,23 @@ $("messages").addEventListener("click", async (e) => {
     catch (err) { toast("삭제 실패: " + (err.message || err)); }
     return;
   }
+  // 👎 아쉬운 답변 — 인용된 지식 신뢰도 강등 (부패 루프)
+  const scold = e.target.closest(".scold-btn");
+  if (scold) {
+    scold.disabled = true;
+    try {
+      await store.attachFeedback(state.currentWsId, scold.dataset.msg, false);
+      toast("👎 반영 — 이 답에 쓰인 기억의 신뢰도를 낮췄어요. 반복되면 회수에서 제외됩니다.");
+    } catch (err) { console.error(err); scold.disabled = false; }
+    return;
+  }
   const btn = e.target.closest(".praise-btn");
   if (!btn) return;
   const msgId = btn.dataset.msg, agentId = btn.dataset.agent;
   btn.disabled = true;
   try {
     await store.praiseMessage(state.currentWsId, state.currentChId, msgId);
-    store.attachFeedback(state.currentWsId, msgId); // 계측: TTA·👍율 (실패해도 무시)
+    store.attachFeedback(state.currentWsId, msgId, true); // 계측 + 인용 지식 신뢰 상승
     await awardExp(agentId, EXP.PRAISE, 0);
     flyBubble("👍");
   } catch (err) { console.error(err); }
@@ -1326,6 +1336,7 @@ function renderMemories() {
       <div class="mem-meta">
         <span class="mem-badge${m.promoted ? " p" : ""}">${m.promoted ? "🧠 승격" : "자동"}</span>
         ${m.masked ? `<span class="mem-badge mask" title="개인정보가 가려져 저장됨: ${esc((m.maskedKinds || []).join(", "))}">🔒 마스킹</span>` : ""}
+        ${(m.trust || 0) <= -2 ? `<span class="mem-badge low" title="👎가 쌓여 답변에 더 이상 쓰이지 않아요. 필요 없으면 삭제하세요.">⚠️ 신뢰 낮음</span>` : (m.trust || 0) < 0 ? `<span class="mem-badge low">👎 ${-m.trust}</span>` : ""}
         <span class="mem-acts">${m.promoted ? "" : `<button class="mem-act mem-up" data-id="${m.id}" title="팀 지식으로 승격 — 모든 에이전트가 우선 반영">🧠</button>`}<button class="mem-act mem-del" data-id="${m.id}" title="이 지식 삭제">✕</button></span>
       </div>
       ${esc(m.content)}

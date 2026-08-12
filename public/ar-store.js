@@ -514,12 +514,15 @@ export async function fetchTopMemories(wsId, agentId, k = 6, queryText = "") {
 
   const now = Date.now();
   const scored = all.map((m, i) => {
+    // 부패 루프: 👎 누적(trust ≤ -2) 지식은 회수 자체에서 제외 — 자신 있게 틀리는 퇴화 방지
+    if ((m.trust || 0) <= -2) return { m, rel: 0, score: -1 };
     let hit = 0;
     for (const t of qGrams) if (docGrams[i].has(t)) hit += idf(t);
     const rel = qWeight ? hit / qWeight : 0;
     const ageDays = m.createdAt?.seconds ? (now - m.createdAt.seconds * 1000) / 86400000 : 0;
     const rec = Math.pow(0.5, ageDays / RECENCY_HALF_LIFE_DAYS);
-    const score = 0.65 * rel + 0.20 * rec + 0.15 * (m.promoted ? 1 : 0);
+    const trustAdj = 0.05 * Math.max(-1, Math.min(3, m.trust || 0)); // 👍는 살짝 승급, 👎 1회는 살짝 강등
+    const score = 0.65 * rel + 0.20 * rec + 0.15 * (m.promoted ? 1 : 0) + trustAdj;
     return { m, rel, score };
   });
 
@@ -555,14 +558,23 @@ export async function logAnswerMetric(wsId, data) {
   } catch (e) { console.warn("metric log 실패(무시):", e.message); }
 }
 
-// 👍 시 해당 답변의 metric에 피드백 기록 (msgId로 조인)
-export async function attachFeedback(wsId, msgId) {
+// 👍/👎 시 해당 답변의 metric에 피드백 기록 (msgId로 조인) +
+// 그 답변에 인용된 지식의 신뢰도(trust)를 올리거나 내린다.
+// "기억 시스템의 어려움은 쓰기가 아니라 잊기" — 👎가 쌓인 지식은 회수에서 강등된다.
+export async function attachFeedback(wsId, msgId, up = true) {
   try {
     const snap = await getDocs(query(
       collection(db, "workspaces", wsId, "metrics"),
       where("msgId", "==", msgId), limit(1)
     ));
-    if (!snap.empty) await updateDoc(snap.docs[0].ref, { thumbsUp: true, feedbackTs: serverTimestamp() });
+    if (snap.empty) return;
+    await updateDoc(snap.docs[0].ref, { thumbsUp: up, feedbackTs: serverTimestamp() });
+    const cited = snap.docs[0].data().citedIds || [];
+    for (const kid of cited) {
+      try {
+        await updateDoc(doc(db, "workspaces", wsId, "knowledge", kid), { trust: increment(up ? 1 : -1) });
+      } catch (_) {} // 삭제된 지식이면 무시
+    }
   } catch (e) { console.warn("feedback 기록 실패(무시):", e.message); }
 }
 

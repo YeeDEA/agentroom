@@ -259,6 +259,12 @@ button { font-family: inherit; }
 .mem-badge { font-size: 9px; padding: 1px 6px; border-radius: 6px; background: var(--bg-4); color: var(--txt-mute); }
 .mem-badge.p { background: var(--lime-soft); color: var(--lime); }
 .mem-badge.mask { background: var(--bg-4); color: var(--gold); cursor: help; }
+.mem-badge.low { background: var(--bg-4); color: var(--danger); cursor: help; }
+/* 👎 버튼 — 👍 옆, 톤 낮게 */
+.scold-btn { background: transparent; border: 1px solid var(--line); border-radius: 8px;
+  padding: 3px 8px; font-size: 12px; cursor: pointer; color: var(--txt-mute); margin-left: 6px; }
+.scold-btn:hover { color: var(--danger); border-color: var(--danger); }
+.scold-btn:disabled { opacity: .45; cursor: default; }
 /* 허용되지 않은 스킴의 이미지는 렌더 대신 안내 (XSS·추적 픽셀 차단) */
 .msg-img-blocked { margin-top: 6px; padding: 10px 12px; background: var(--bg-3); border: 1px dashed var(--line);
   border-radius: 8px; font-size: 12px; color: var(--txt-mute); }

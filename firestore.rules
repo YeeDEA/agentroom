@@ -186,7 +186,7 @@ service cloud.firestore {
       match /metrics/{mid} {
         allow read: if isWsMember(wsId);
         allow create: if isWsMember(wsId) &&
-          request.resource.data.type in ["agent_answer", "upgrade_intent"];
+          request.resource.data.type in ["agent_answer", "upgrade_intent", "aha"];
         // 피드백 조인: thumbsUp/feedbackTs 만 사후 갱신 가능
         allow update: if isWsMember(wsId) &&
           request.resource.data.diff(resource.data).affectedKeys()

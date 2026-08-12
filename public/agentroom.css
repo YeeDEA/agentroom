@@ -248,6 +248,12 @@ button { font-family: inherit; }
   opacity: 0; transition: opacity .12s; background: var(--bg-2); border: 1px solid var(--line);
   border-radius: 10px; padding: 2px; }
 .msg:hover .msg-tools { opacity: 1; }
+/* 터치 기기: 호버가 없으므로 툴바 상시 노출 (🧠 발견 가능성) */
+@media (hover: none) { .msg .msg-tools { opacity: 1; } }
+/* 승격 메시지 영구 마커 — 팀 기억이 된 메시지는 채팅에서 항상 보인다 */
+.msg.promoted-msg .msg-body { border-left: 3px solid var(--lime); padding-left: 10px; margin-left: -13px; border-radius: 2px; }
+.promoted-chip { font-size: 10px; background: var(--lime-soft); color: var(--lime);
+  border-radius: 6px; padding: 1px 6px; font-weight: 700; }
 .msg-tool { background: transparent; border: 0; color: var(--txt-dim); border-radius: 8px;
   padding: 3px 8px; font-size: 12px; cursor: pointer; line-height: 1.2; }
 .msg-tool:hover { background: var(--bg-4); color: var(--txt); }

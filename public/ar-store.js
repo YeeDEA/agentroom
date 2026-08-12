@@ -249,9 +249,15 @@ export async function sendMessage(wsId, chId, msg) {
     createdAt: serverTimestamp(),
   });
   // 안읽음 배지용 — 채널의 마지막 활동 시각 (실패해도 메시지 전송엔 영향 없음)
-  updateDoc(doc(db, "workspaces", wsId, "channels", chId), { lastMessageAt: serverTimestamp() }).catch(() => {});
+  touchChannel(wsId, chId);
   return ref;
 }
+
+// 안읽음 배지용 채널 활동 시각 — 메시지·카드 공용
+function touchChannel(wsId, chId) {
+  updateDoc(doc(db, "workspaces", wsId, "channels", chId), { lastMessageAt: serverTimestamp() }).catch(() => {});
+}
+
 
 // ---------- 안읽음 (채널별 마지막 확인 시각) ----------
 export async function markChannelSeen(wsId, uid, chId) {
@@ -367,6 +373,7 @@ export async function addDocCard(wsId, chId, payload) {
     kind: "doc", content: JSON.stringify(payload),
     mentions: [], reactions: 0, agentId: null, createdAt: serverTimestamp(),
   });
+  touchChannel(wsId, chId);
 }
 
 // 평가 카드(에이전트 채점)
@@ -376,6 +383,7 @@ export async function addScoreCard(wsId, chId, payload) {
     kind: "scores", content: JSON.stringify(payload),
     mentions: [], reactions: 0, agentId: null, createdAt: serverTimestamp(),
   });
+  touchChannel(wsId, chId);
 }
 
 export async function addAgentToChannel(wsId, chId, agentId) {
@@ -657,6 +665,18 @@ export async function attachFeedback(wsId, msgId, up = true) {
       } catch (_) {} // 삭제된 지식이면 무시
     }
   } catch (e) { console.warn("feedback 기록 실패(무시):", e.message); }
+}
+
+// 아하 이벤트 3종(첫 승격·첫 각주답변·재방문) — 컨시어지 검증에서 "뭘 배웠는지"의 증거
+export async function logAhaOnce(wsId, uid, event) {
+  try {
+    const key = `aha_${wsId}_${uid}_${event}`;
+    if (localStorage.getItem(key)) return;
+    localStorage.setItem(key, "1");
+    await addDoc(collection(db, "workspaces", wsId, "metrics"), {
+      type: "aha", event, uid, ts: serverTimestamp(),
+    });
+  } catch (_) {}
 }
 
 // 최근 7일 지표 집계 — /metrics 카드용

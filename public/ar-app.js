@@ -368,6 +368,13 @@ function selectWorkspace(wsId) {
   state.channels = []; state.agents = []; state.messages = []; state.memories = [];
   state.roomProfiles = {};
   state.unsub.profiles = store.listenRoomProfiles(wsId, (map) => { state.roomProfiles = map; renderMessages(); renderMe(); });
+  // 재방문 세션 감지: 마지막 방문에서 6시간 이상 지났으면 아하 이벤트(1회)
+  try {
+    const vk = `visit_${wsId}_${state.user.uid}`;
+    const last = Number(localStorage.getItem(vk) || 0);
+    if (last && Date.now() - last > 6 * 3600 * 1000) store.logAhaOnce(wsId, state.user.uid, "revisit_session");
+    localStorage.setItem(vk, String(Date.now()));
+  } catch (_) {}
   state.myReads = {};
   if (state.unsub.reads) state.unsub.reads();
   state.unsub.reads = store.listenMyReads(wsId, state.user.uid, (map) => { state.myReads = map; renderChannels(); });
@@ -759,8 +766,8 @@ function msgHtml(m) {
     : (isAgent && m.agentId ? `<div class="msg-nosrc">일반 지식으로 답변 — 팀 기억 미사용</div>` : "");
   const hib = isAgent && m.hibernated
     ? `<div class="msg-hibernate" data-n="${m.hibernated}">❄️ 잠든 기억 ${m.hibernated}개가 이 질문에 답할 수 있었어요 — <b>깨우기</b></div>` : "";
-  return `<div class="msg${mine ? " mine" : ""}" data-msg-id="${m.id}">${ava}<div class="msg-body">
-    <div class="msg-top"><span class="msg-name ${isAgent ? "agent" : ""}${mine ? " me" : ""}">${esc(dispName)}</span>${badge}<span class="msg-time">${fmtTime(m.createdAt)}</span></div>
+  return `<div class="msg${mine ? " mine" : ""}${m.promotedToMemory ? " promoted-msg" : ""}" data-msg-id="${m.id}">${ava}<div class="msg-body">
+    <div class="msg-top"><span class="msg-name ${isAgent ? "agent" : ""}${mine ? " me" : ""}">${esc(dispName)}</span>${badge}<span class="msg-time">${fmtTime(m.createdAt)}</span>${m.promotedToMemory ? `<span class="promoted-chip">🧠 팀 기억</span>` : ""}</div>
     ${m.content ? `<div class="msg-text">${highlightMentions(m.content)}</div>` : ""}${img}${srcs}${hib}${praise}</div>${del}</div>`;
 }
 
@@ -796,6 +803,7 @@ $("messages").addEventListener("click", async (e) => {
       });
       for (const a of channelAgents()) await awardExp(a.id, EXP.LEARN, 1);
       await store.markMessagePromoted(state.currentWsId, state.currentChId, msg.id);
+      store.logAhaOnce(state.currentWsId, state.user.uid, "first_promote");
       const wsId = state.currentWsId, chId = state.currentChId;
       toastUndo("🧠 팀 지식으로 승격했어요.", async () => {
         await store.deleteKnowledge(wsId, kRef.id);
@@ -1228,6 +1236,7 @@ function splitIdeas(text) {
 // 계측: 답변 1건 = agent_answer 이벤트 1건 (지연·주입·인용·피드백을 한 문서에)
 function recordAnswerMetric({ wsId, agent, ref, res, retrieval, t0 }) {
   const cited = (res.sources || []).filter((n) => n >= 1 && n <= retrieval.meta.ids.length);
+  if (cited.length) store.logAhaOnce(wsId, state.user.uid, "first_cited_answer");
   store.logAnswerMetric(wsId, {
     agentId: agent.id, channelId: state.currentChId, msgId: ref?.id || null,
     latencyMs: Math.round(performance.now() - t0),

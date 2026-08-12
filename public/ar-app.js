@@ -614,14 +614,27 @@ function renderMessages() {
   const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 120;
   let html = "";
   if (!state.messages.length && !state.pending.length) {
+    // 빈 채널은 죽은 화면이 아니라 시작점 — 주행동 1개(질문 추천)만 크게, 명령문으로
     const ca = channelAgents();
-    html = `<p class="empty-hint">첫 메시지를 남겨보세요.` +
-      (ca.length ? `<br>에이전트를 부르려면 <b>@${esc(ca[0].name)}</b> 처럼 멘션하세요.`
-                 : `<br>이 채널엔 아직 에이전트가 없어요. 위 <b>＋ 에이전트</b>로 초대하세요.`) + `</p>`;
+    html = ca.length
+      ? `<div class="empty-start">
+          <div class="empty-start-emoji">💬</div>
+          <div class="empty-start-title">첫 질문을 던져보세요</div>
+          <p class="empty-start-sub"><b>@${esc(ca[0].name)}</b>${ca.length > 1 ? ` 외 ${ca.length - 1}명` : ""}이 팀 지식으로 답할 준비가 됐어요.</p>
+          <button class="btn btn-primary empty-start-cta" id="empty-suggest">✨ 뭘 물어볼지 추천받기</button>
+          <p class="empty-start-alt">예전 카톡을 부어 넣으려면 <code>/import</code></p>
+        </div>`
+      : `<div class="empty-start">
+          <div class="empty-start-emoji">🤖</div>
+          <div class="empty-start-title">에이전트를 초대하세요</div>
+          <p class="empty-start-sub">사이드바의 <b>＋ 에이전트</b>를 누르면 이 채널에서 함께 일할 AI 팀원이 생깁니다.</p>
+        </div>`;
   }
   for (const m of state.messages) html += msgHtml(m);
   for (const p of state.pending) html += thinkingHtml(p);
   box.innerHTML = html;
+  const es = box.querySelector("#empty-suggest");
+  if (es) es.onclick = () => $("suggest-btn").click();
 
   // 아바타 캔버스 렌더
   box.querySelectorAll("canvas[data-hue]").forEach((cv) => {

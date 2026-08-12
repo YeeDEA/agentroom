@@ -449,6 +449,20 @@ button { font-family: inherit; }
 @keyframes pop { from{ opacity: 0; transform: translateY(10px) } to{ opacity: 1; transform: translateY(0) } }
 
 .empty-hint { color: var(--txt-mute); font-size: 13px; text-align: center; margin: 30px 12px; line-height: 1.8; }
+/* 빈 채널 = 시작점 (Linear 원칙: 주행동 1개, 명령문, 미세한 맥박) */
+.empty-start { display: flex; flex-direction: column; align-items: center; gap: 8px;
+  margin: 9vh auto 0; max-width: 340px; text-align: center; }
+.empty-start-emoji { font-size: 40px; }
+.empty-start-title { font-size: 19px; font-weight: 800; letter-spacing: -.3px; }
+.empty-start-sub { margin: 0; font-size: 13px; color: var(--txt-dim); line-height: 1.6; }
+.empty-start-cta { margin-top: 10px; animation: cta-pulse 2.4s ease-in-out infinite; }
+.empty-start-alt { margin: 6px 0 0; font-size: 12px; color: var(--txt-mute); }
+.empty-start-alt code { background: var(--bg-3); border: 1px solid var(--line);
+  border-radius: 6px; padding: 1px 6px; }
+@keyframes cta-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 34%, transparent); }
+  50% { box-shadow: 0 0 0 9px color-mix(in srgb, var(--accent) 0%, transparent); }
+}
 
 /* 반응형 */
 @media (max-width: 1040px) {

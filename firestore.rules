@@ -132,9 +132,11 @@ service cloud.firestore {
       allow update: if isAuthenticated() &&
         request.resource.data.ownerId == resource.data.ownerId && (
 
-          // (a) 멤버: 방 이름·코드·PIN 수정 (멤버 목록은 못 건드림)
+          // (a) 멤버: 방 이름·코드·PIN·플랜 관련 수정 (멤버 목록은 못 건드림)
+          // 주의: plan/proUntil을 클라이언트가 쓸 수 있는 건 프로토타입 한계 —
+          // 실결제 도입 시 서버(Cloud Functions)만 쓰도록 잠가야 함.
           (uid() in resource.data.memberIds &&
-            changedKeys().hasOnly(['name', 'code', 'pin', 'joinSecret']))
+            changedKeys().hasOnly(['name', 'code', 'pin', 'joinSecret', 'plan', 'proUntil', 'backfillUsed']))
 
           // ✅ (2) (b) 비멤버 참여: invites 문서 존재로 "코드+PIN 앎"을 증명
           || (!(uid() in resource.data.memberIds) &&
@@ -184,7 +186,7 @@ service cloud.firestore {
       match /metrics/{mid} {
         allow read: if isWsMember(wsId);
         allow create: if isWsMember(wsId) &&
-          request.resource.data.type == "agent_answer";
+          request.resource.data.type in ["agent_answer", "upgrade_intent"];
         // 피드백 조인: thumbsUp/feedbackTs 만 사후 갱신 가능
         allow update: if isWsMember(wsId) &&
           request.resource.data.diff(resource.data).affectedKeys()

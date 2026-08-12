@@ -270,6 +270,18 @@ button { font-family: inherit; }
 .msg-flash { animation: msgflash 2.2s ease; border-radius: 10px; }
 @keyframes msgflash { 0% { background: color-mix(in srgb, var(--accent) 22%, transparent); }
   100% { background: transparent; } }
+/* ❄️ 동면 배지 — 클릭 = 업그레이드 */
+.msg-hibernate { margin-top: 5px; font-size: 11px; color: var(--me); cursor: pointer;
+  background: var(--bg-3); border: 1px dashed var(--line); border-radius: 8px; padding: 6px 10px; }
+.msg-hibernate:hover { border-color: var(--me); }
+/* 업그레이드 모달 */
+.pro-list { list-style: none; margin: 12px 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.pro-list li { background: var(--bg-3); border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; font-size: 13px; }
+.pro-price { text-align: center; font-size: 13px; color: var(--txt-dim); margin: 4px 0 12px; }
+.pro-price b { color: var(--accent-2); font-size: 16px; }
+.suggest-row { cursor: pointer; }
+.suggest-row:hover { background: var(--bg-4); }
+
 /* 실행취소 토스트 */
 .toast-undo { margin-left: 10px; background: var(--bg-4); border: 1px solid var(--line); color: var(--accent-2);
   border-radius: 8px; padding: 3px 10px; font-size: 12px; font-weight: 700; cursor: pointer; }

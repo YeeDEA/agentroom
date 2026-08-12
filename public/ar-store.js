@@ -96,7 +96,46 @@ export async function createWorkspace(uid, name) {
   });
   // 초대 문서도 함께 생성 (없으면 코드 참여 불가)
   await writeInvite(inviteSecret(code, pin), ref.id, wsName);
+  // 콜드스타트 해소: 기본 채널 + 가이드봇 + 시작 카드
+  try { await seedOnboarding(ref.id, uid); } catch (e) { console.warn("onboarding seed 실패:", e.message); }
   return ref.id;
+}
+
+// 새 워크스페이스 온보딩 — "빈 화면에 혼자"를 없앤다
+export async function seedOnboarding(wsId, uid) {
+  const ch = await createChannel(wsId, "일반", uid);
+  const agentRef = await createAgent(wsId, uid, {
+    name: "가이드봇", hue: 205, tone: "짧고 친절하게, 다음 행동 하나를 콕 집어", verbosity: "간결",
+    persona: "너는 AgentRoom의 안내자다. 팀원이 뭘 해야 할지 모를 때 다음 단계를 제안한다: ①@멘션으로 질문 ②중요한 메시지는 🧠로 팀 지식 승격 ③/import로 예전 카톡 부어넣기 ④/discuss로 에이전트 회의 ⑤📚 팀 위키 확인. 대화 맥락을 보고 '이런 걸 물어보세요'라며 구체적 질문 2~3개를 제안하라. 모든 답은 3문장 이내.",
+  });
+  const chId = ch?.id || ch; // createChannel 반환형 호환
+  try { await updateDoc(doc(db, "workspaces", wsId, "channels", chId), { agentIds: [agentRef?.id || agentRef] }); } catch (_) {}
+  await addDocCard(wsId, chId, {
+    title: "환영해요! 3분 시작 가이드", emoji: "👋",
+    sections: [
+      { heading: "1분 안에 아하 모먼트", items: [
+        "① 아래 입력창에 @가이드봇 안녕? 이라고 인사해 보세요",
+        "② 입력창 옆 ✨ 버튼 = 뭘 물어볼지 모를 때 질문을 추천해 줍니다",
+        "③ /import 로 예전 카톡(.txt)을 부으면 — 과거 대화가 팀 지식이 됩니다",
+      ] },
+      { heading: "팀의 기억이 쌓이는 곳", items: [
+        "중요한 메시지에 🧠(호버) = 팀 지식 승격 · 📚(사이드바) = 팀 위키 · 에이전트 클릭 = 성장 상태",
+      ] },
+    ],
+  });
+  return chId;
+}
+
+// ---------- 플랜 (무료/Pro) ----------
+// 프로토타입 한계: plan 필드를 클라이언트가 쓸 수 있다(실서비스는 결제 서버가 써야 함).
+export function isPro(ws) {
+  if (!ws) return false;
+  if (ws.plan === "pro") return true;
+  const until = ws.proUntil?.seconds ? ws.proUntil.seconds * 1000 : 0;
+  return until > Date.now(); // 체험(trial)도 여기로 — 만료되면 자동 재잠금
+}
+export async function markBackfillUsed(wsId) {
+  try { await updateDoc(doc(db, "workspaces", wsId), { backfillUsed: true }); } catch (_) {}
 }
 
 // 기존 워크스페이스에 코드/비밀번호가 없으면 생성하고, 초대 문서도 보장한다
@@ -206,6 +245,7 @@ export async function sendMessage(wsId, chId, msg) {
     ...(msg.image ? { image: msg.image } : {}),
     ...(msg.sources && msg.sources.length ? { sources: msg.sources.slice(0, 3) } : {}),
     ...(msg.sourceKids && msg.sourceKids.length ? { sourceKids: msg.sourceKids.slice(0, 3) } : {}),
+    ...(msg.hibernated ? { hibernated: msg.hibernated } : {}),
     createdAt: serverTimestamp(),
   });
   // 안읽음 배지용 — 채널의 마지막 활동 시각 (실패해도 메시지 전송엔 영향 없음)
@@ -514,7 +554,8 @@ const RECENCY_HALF_LIFE_DAYS = 14;
  * score = 0.65*연관도(IDF 가중 bigram 겹침) + 0.20*최근성 + 0.15*승격
  * @returns {{texts:string[], meta:{ids:string[], scores:number[], topScore:number, miss:boolean, poolSize:number, mode:string}}}
  */
-export async function fetchTopMemories(wsId, agentId, k = 6, queryText = "") {
+export async function fetchTopMemories(wsId, agentId, k = 6, queryText = "", opts = {}) {
+  const pro = opts.pro !== false; // 기본 true(레거시 호출 보호) — 게이트는 명시적으로 pro:false일 때만
   const q = query(
     collection(db, "workspaces", wsId, "knowledge"),
     orderBy("createdAt", "desc"), limit(100)
@@ -541,9 +582,18 @@ export async function fetchTopMemories(wsId, agentId, k = 6, queryText = "") {
   for (const t of qGrams) qWeight += idf(t);
 
   const now = Date.now();
+  const HIBERNATE_MS = 90 * 86400000; // 무료 플랜: 90일 이전 지식은 동면(회수 제외, 삭제 아님)
+  let hibernatedHits = 0;
   const scored = all.map((m, i) => {
     // 부패 루프: 👎 누적(trust ≤ -2) 지식은 회수 자체에서 제외 — 자신 있게 틀리는 퇴화 방지
     if ((m.trust || 0) <= -2) return { m, rel: 0, score: -1 };
+    const ageMs = m.createdAt?.seconds ? now - m.createdAt.seconds * 1000 : 0;
+    if (!pro && ageMs > HIBERNATE_MS) {
+      // 동면 — 이 질문에 답할 수 있었는지(게이트 통과 여부)만 세고 제외
+      let hh = 0; for (const t of qGrams) if (docGrams[i].has(t)) hh += idf(t);
+      if (qWeight && hh / qWeight >= RELEVANCE_GATE) hibernatedHits++;
+      return { m, rel: 0, score: -1 };
+    }
     let hit = 0;
     for (const t of qGrams) if (docGrams[i].has(t)) hit += idf(t);
     const rel = qWeight ? hit / qWeight : 0;
@@ -570,6 +620,7 @@ export async function fetchTopMemories(wsId, agentId, k = 6, queryText = "") {
       scores: pick.map((s) => Math.round(s.rel * 1000) / 1000),
       topScore: pick.length ? pick[0].rel : 0,
       miss: pick.length === 0,          // 회수 실패 — 계측 대상
+      hibernated: hibernatedHits,       // ❄️ 동면 중인데 이 질문에 답할 수 있었던 지식 수
       poolSize: all.length,
       mode: "relevance",
     },

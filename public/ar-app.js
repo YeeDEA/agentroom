@@ -131,6 +131,40 @@ function authError(err) {
 $("logout-btn").onclick = () => signOut(auth);
 $("me-chip").onclick = openProfileModal;
 
+// ---------- ✨ 질문 추천 (온보딩: "뭘 물어봐야 할지 모르겠어요") ----------
+$("suggest-btn").onclick = async () => {
+  if (!state.currentWsId || !state.currentChId) { toast("먼저 채널을 선택하세요."); return; }
+  const btn = $("suggest-btn");
+  btn.disabled = true; btn.textContent = "⏳";
+  const agents = channelAgents();
+  const firstAgent = agents[0]?.name || "가이드봇";
+  let list = [];
+  try {
+    const retrieval = await store.fetchTopMemories(state.currentWsId, null, 8, "", { pro: true });
+    list = await ai.suggestQuestions({ knowledge: retrieval.texts, agentNames: agents.map((a) => a.name) });
+  } catch (_) {}
+  // LLM 실패(쿼터 등) 시에도 온보딩은 끊기지 않게 — 정적 추천으로 폴백
+  if (!list.length) {
+    list = [
+      `@${firstAgent} 지금까지 우리 팀이 확정한 것들을 한눈에 정리해줘`,
+      `@${firstAgent} 이번 주에 우리가 놓치고 있는 게 뭘까?`,
+      `/discuss 다음 마일스톤에서 가장 먼저 할 일`,
+    ];
+  }
+  btn.disabled = false; btn.textContent = "✨";
+  const pal = $("cmd-palette");
+  pal.innerHTML = `<div class="cmd-row" style="opacity:.6">✨ 이런 걸 물어보세요 (클릭하면 입력창에 들어가요)</div>` +
+    list.map((q) => `<div class="cmd-row suggest-row" data-q="${esc(q)}"><span>${esc(q)}</span></div>`).join("");
+  pal.hidden = false;
+  pal.querySelectorAll(".suggest-row").forEach((r) => r.onclick = () => {
+    $("composer-input").value = r.dataset.q;
+    pal.hidden = true;
+    $("composer-input").focus();
+  });
+  const dismiss = (e) => { if (!pal.contains(e.target) && e.target !== btn) { pal.hidden = true; document.removeEventListener("click", dismiss); } };
+  setTimeout(() => document.addEventListener("click", dismiss), 0);
+};
+
 // ---------- ☀️/🌙 테마 (라이트 기본 · 업무용) ----------
 const THEME_KEY = "agentroom_theme";
 function applyTheme(t) {
@@ -426,6 +460,41 @@ function markSeen(chId) {
 }
 
 function currentChannel() { return state.channels.find((c) => c.id === state.currentChId) || null; }
+function currentWs() { return state.workspaces.find((w) => w.id === state.currentWsId) || null; }
+function wsIsPro() { return store.isPro(currentWs()); }
+
+// 업그레이드 모달 — 패널 결론: 판매자 언어 금지, 보유량 먼저, 준거점은 커피
+// 실결제 전이므로 '출시 알림'으로 지불 의향만 계측한다(upgrade_intent 이벤트).
+function openUpgradeModal(trigger, detail = {}) {
+  const hib = detail.hibernated || 0;
+  const lead = trigger === "hibernate"
+    ? `팀이 가르쳐준 기억 중 <b>${hib}개</b>가 이 질문에 답할 수 있었지만, 90일이 지나 잠들어 있어요. 삭제된 게 아니에요 — Pro에서 깨울 수 있어요.`
+    : trigger === "backfill-again"
+      ? `무료 플랜의 카톡 백필 1회를 이미 사용했어요. 동아리 단톡은 보통 3~5개 — <b>나머지 방의 기억도</b> 팀 지식으로 옮겨보세요.`
+      : `무료 백필은 최근 500메시지까지예요. <b>작년 이맘때의 답은 501번째 메시지에 있을지도</b> 몰라요.`;
+  openModal(`
+    <h3>❄️ 잠든 기억 깨우기 — Pro</h3>
+    <p class="sub">${lead}</p>
+    <ul class="pro-list">
+      <li>📥 카톡 백필 <b>무제한</b> (무료: 1회·500메시지)</li>
+      <li>🧠 팀 지식 <b>영구 보존</b> (무료: 최근 90일만 답변에 사용)</li>
+      <li>🤖 에이전트 3명 (무료: 1명)</li>
+    </ul>
+    <p class="pro-price">팀당 <b>월 4,900원</b> — 커피 한 잔 값으로 팀의 1년을 기억합니다</p>
+    <div class="modal-actions">
+      <button class="btn" id="up-close">나중에</button>
+      <button class="btn btn-primary" id="up-notify">출시 알림 받기 — 50% 할인</button>
+    </div>
+    <p class="sub" style="text-align:center;margin-top:8px;font-size:11px">무료로 계속 써도 쌓인 지식은 사라지지 않아요.</p>`);
+  $("up-close").onclick = closeModal;
+  $("up-notify").onclick = async () => {
+    try {
+      await store.logAnswerMetric(state.currentWsId, { type: "upgrade_intent", trigger, ...detail });
+    } catch (_) {}
+    closeModal();
+    toast("🎉 등록됐어요! 출시하면 50% 할인 코드를 보내드릴게요.");
+  };
+}
 function channelAgents() {
   const ch = currentChannel();
   if (!ch) return [];
@@ -675,9 +744,11 @@ function msgHtml(m) {
   const srcs = isAgent && Array.isArray(m.sources) && m.sources.length
     ? `<div class="msg-sources">🧠 근거: ${m.sources.map((s, i) => `<span class="src-link" data-kid="${esc((m.sourceKids || [])[i] || "")}" title="클릭하면 원본 지식·출처로 이동">${esc(s)}</span>`).join(" · ")}</div>`
     : (isAgent && m.agentId ? `<div class="msg-nosrc">일반 지식으로 답변 — 팀 기억 미사용</div>` : "");
+  const hib = isAgent && m.hibernated
+    ? `<div class="msg-hibernate" data-n="${m.hibernated}">❄️ 잠든 기억 ${m.hibernated}개가 이 질문에 답할 수 있었어요 — <b>깨우기</b></div>` : "";
   return `<div class="msg${mine ? " mine" : ""}" data-msg-id="${m.id}">${ava}<div class="msg-body">
     <div class="msg-top"><span class="msg-name ${isAgent ? "agent" : ""}${mine ? " me" : ""}">${esc(dispName)}</span>${badge}<span class="msg-time">${fmtTime(m.createdAt)}</span></div>
-    ${m.content ? `<div class="msg-text">${highlightMentions(m.content)}</div>` : ""}${img}${srcs}${praise}</div>${del}</div>`;
+    ${m.content ? `<div class="msg-text">${highlightMentions(m.content)}</div>` : ""}${img}${srcs}${hib}${praise}</div>${del}</div>`;
 }
 
 function thinkingHtml(p) {
@@ -750,6 +821,9 @@ $("messages").addEventListener("click", async (e) => {
     catch (err) { toast("삭제 실패: " + (err.message || err)); }
     return;
   }
+  // ❄️ 동면 배지 클릭 → 업그레이드 모달
+  const hibEl = e.target.closest(".msg-hibernate");
+  if (hibEl) { openUpgradeModal("hibernate", { hibernated: Number(hibEl.dataset.n) || 0 }); return; }
   // 🧠 각주 클릭 → 원본 메시지로 점프, 없으면 지식 상세 (출처 사슬)
   const srcEl = e.target.closest(".src-link");
   if (srcEl) {
@@ -997,8 +1071,10 @@ function parseKakaoExport(raw) {
   return msgs;
 }
 
+const FREE_BACKFILL_LIMIT = 500; // 무료: 500메시지(약 한 달치) · 1회 — 아하는 겪고, 1년 회고에서 벽
 async function openImportModal() {
   if (!state.currentWsId || !state.currentChId) { toast("먼저 채널을 선택하세요."); return; }
+  if (!wsIsPro() && currentWs()?.backfillUsed) { openUpgradeModal("backfill-again"); return; }
   openModal(`
     <h3>📥 카톡 백필</h3>
     <p class="sub">카카오톡 채팅방 → 설정 → <b>대화 내용 내보내기(.txt)</b> 파일을 올리거나 내용을 붙여넣으세요.
@@ -1017,9 +1093,15 @@ async function openImportModal() {
   };
   $("imp-run").onclick = async () => {
     const raw = $("imp-text").value;
-    const msgs = parseKakaoExport(raw);
+    let msgs = parseKakaoExport(raw);
     const status = $("imp-status");
     if (!msgs.length) { status.textContent = "⚠️ 카톡 내보내기 형식을 인식하지 못했어요. PC/모바일 내보내기 txt인지 확인해 주세요."; return; }
+    // 무료 게이트: 최근 500메시지까지만 (오래된 것부터가 아니라 최신 쪽을 남긴다)
+    let gated = 0;
+    if (!wsIsPro() && msgs.length > FREE_BACKFILL_LIMIT) {
+      gated = msgs.length - FREE_BACKFILL_LIMIT;
+      msgs = msgs.slice(-FREE_BACKFILL_LIMIT);
+    }
     $("imp-run").disabled = true;
     // 30개씩 묶어 LLM 선별 추출 — 쿼터 보호를 위해 최대 12청크(직렬 큐가 페이싱)
     const CHUNK = 30, MAX_CHUNKS = 12;
@@ -1038,11 +1120,13 @@ async function openImportModal() {
         saved++;
       }
     }
+    if (!wsIsPro()) store.markBackfillUsed(wsId);
     await store.addDocCard(wsId, chId, {
       title: "카톡 백필 완료", emoji: "📥",
       sections: [
         { heading: "결과", items: [
           `메시지 ${msgs.length}건 분석 → 지식 ${saved}개 등록`,
+          ...(gated > 0 ? [`무료 플랜은 최근 500메시지까지 — 그 이전 ${gated}건은 Pro에서 깨울 수 있어요`] : []),
           ...(skipped > 0 ? [`쿼터 보호를 위해 ${skipped}건은 이번에 건너뛰었어요 (다시 /import로 이어서 가능)`] : []),
         ] },
         { heading: "다음", items: ["이제 에이전트에게 과거 일을 물어보세요 — 🧠 근거와 함께 답합니다. 📚 팀 위키에서도 확인할 수 있어요."] },
@@ -1050,6 +1134,7 @@ async function openImportModal() {
     });
     closeModal();
     toast(`📥 백필 완료 — 지식 ${saved}개 등록`);
+    if (gated > 0) openUpgradeModal("backfill-limit", { gatedMessages: gated });
   };
 }
 
@@ -1152,13 +1237,14 @@ async function agentSpeak(agent, userText, awardAnswer = true) {
   let res = null;
   try {
     const t0 = performance.now();
-    const retrieval = await store.fetchTopMemories(wsId, agent.id, 4, userText);
+    const retrieval = await store.fetchTopMemories(wsId, agent.id, 4, userText, { pro: wsIsPro() });
     const memories = retrieval.texts;
     const recent = state.messages.slice(-8).map((m) => ({ senderName: m.senderName, content: m.content }));
     res = await ai.respond({ agent, memories, recent, userName: meName(), userText, levelName: levelInfo(agent.level).name });
     const cites = (res.sources || []).map((n) => ({ t: String(memories[n - 1] || "").slice(0, 70), kid: retrieval.meta.ids[n - 1] || "" })).filter((c) => c.t);
     const ref = await store.sendMessage(wsId, chId, { senderId: agent.id, senderType: "agent", senderName: agent.name, content: res.reply, agentId: agent.id,
-      sources: cites.map((c) => c.t), sourceKids: cites.map((c) => c.kid) });
+      sources: cites.map((c) => c.t), sourceKids: cites.map((c) => c.kid),
+      hibernated: retrieval.meta.hibernated || 0 });
     recordAnswerMetric({ wsId, agent, ref, res, retrieval, t0 });
     if (res.ok && awardAnswer) await awardExp(agent.id, EXP.ANSWER, 0, 1);
   } catch (err) { console.error(err); }
@@ -1246,7 +1332,7 @@ async function runEvaluate(arg) {
   const scores = [];
   for (const a of cas) {
     try {
-      const memories = (await store.fetchTopMemories(state.currentWsId, a.id, 4, arg)).texts;
+      const memories = (await store.fetchTopMemories(state.currentWsId, a.id, 4, arg, { pro: wsIsPro() })).texts;
       const r = await ai.score({ agent: a, memories, item: arg });
       if (r) { scores.push({ name: a.name, score: r.score, reason: r.reason }); await awardExp(a.id, EXP.ANSWER, 0, 1); }
     } catch (err) { console.error(err); }
@@ -1267,7 +1353,7 @@ async function triggerAgent(agent, userText) {
   renderMessages();
   try {
     const t0 = performance.now();
-    const retrieval = await store.fetchTopMemories(wsId, agent.id, 6, userText);
+    const retrieval = await store.fetchTopMemories(wsId, agent.id, 6, userText, { pro: wsIsPro() });
     const memories = retrieval.texts;
     const recent = state.messages.slice(-12).map((m) => ({ senderName: m.senderName, content: m.content }));
     const res = await ai.respond({
@@ -1279,6 +1365,7 @@ async function triggerAgent(agent, userText) {
       senderId: agent.id, senderType: "agent", senderName: agent.name,
       content: res.reply, agentId: agent.id,
       sources: cites.map((c) => c.t), sourceKids: cites.map((c) => c.kid),
+      hibernated: retrieval.meta.hibernated || 0,
     });
     recordAnswerMetric({ wsId, agent, ref, res, retrieval, t0 });
     if (res.ok) {
@@ -1317,7 +1404,7 @@ async function runRoundtable(participants, topic, userText) {
     state.pending.push({ id: agent.id, name: agent.name, hue, level: agent.level });
     renderMessages();
     try {
-      const retrieval = await store.fetchTopMemories(wsId, agent.id, 5, `${topic || ""} ${userText || ""}`);
+      const retrieval = await store.fetchTopMemories(wsId, agent.id, 5, `${topic || ""} ${userText || ""}`, { pro: wsIsPro() });
       const memories = retrieval.texts;
       const others = participants.filter((a) => a.id !== agent.id).map((a) => a.name);
       const res = await ai.respond({

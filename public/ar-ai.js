@@ -364,3 +364,22 @@ ${convoText}
     return Array.isArray(p?.facts) ? p.facts.filter((f) => typeof f === "string" && f.trim()).slice(0, 3) : [];
   } catch (_) { return []; }
 }
+
+// 온보딩: "뭘 물어봐야 할지 모르겠어요" — 팀 지식 기반 질문 추천
+export async function suggestQuestions({ knowledge, agentNames }) {
+  const k = (knowledge || []).slice(0, 8).map((x, i) => `${i + 1}. ${x}`).join("\n") || "(아직 없음)";
+  const text = await callLLM(
+`아래는 어떤 팀의 AI 워크스페이스에 쌓인 지식과 에이전트 목록이다.
+이 팀원이 지금 바로 던지면 유용할 질문 3개를 제안하라.
+- 반드시 "@에이전트이름 " 으로 시작하는 실제 보낼 수 있는 한국어 질문으로.
+- 쌓인 지식과 연결된 구체적 질문 우선. 지식이 없으면 팀을 파악하는 질문으로.
+
+[에이전트]: ${(agentNames || []).join(", ") || "(없음)"}
+[팀 지식]
+${k}
+
+반드시 아래 STRICT JSON만 출력(코드펜스 금지):
+{"questions": ["@... 질문", "@... 질문", "@... 질문"]}`);
+  const p = parseJson(text);
+  return Array.isArray(p?.questions) ? p.questions.filter((q) => typeof q === "string").slice(0, 3) : [];
+}

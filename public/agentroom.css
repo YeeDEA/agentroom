@@ -260,6 +260,20 @@ button { font-family: inherit; }
 .mem-badge.p { background: var(--lime-soft); color: var(--lime); }
 .mem-badge.mask { background: var(--bg-4); color: var(--gold); cursor: help; }
 .mem-badge.low { background: var(--bg-4); color: var(--danger); cursor: help; }
+/* 안읽음 점 */
+.chan-unread { width: 8px; height: 8px; border-radius: 50%; background: var(--accent);
+  margin-left: auto; flex: 0 0 auto; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
+.chan-unread + span { margin-left: 6px !important; }
+/* 각주 → 원본 점프 */
+.src-link { cursor: pointer; text-decoration: underline dotted; text-underline-offset: 2px; }
+.src-link:hover { color: var(--accent-2); }
+.msg-flash { animation: msgflash 2.2s ease; border-radius: 10px; }
+@keyframes msgflash { 0% { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+  100% { background: transparent; } }
+/* 실행취소 토스트 */
+.toast-undo { margin-left: 10px; background: var(--bg-4); border: 1px solid var(--line); color: var(--accent-2);
+  border-radius: 8px; padding: 3px 10px; font-size: 12px; font-weight: 700; cursor: pointer; }
+
 /* 팀 위키 모달 */
 .wiki-count { font-size: 13px; color: var(--txt-mute); font-weight: 600; }
 .wiki-contribs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }

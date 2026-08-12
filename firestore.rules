@@ -173,6 +173,13 @@ service cloud.firestore {
         allow update, delete: if isWsMember(wsId);
       }
 
+      // ------------- reads (안읽음 배지: 본인 채널별 마지막 확인 시각) -------------
+      match /reads/{rid} {
+        allow read: if isWsMember(wsId);
+        allow create, update: if isWsMember(wsId) && rid == uid();
+        allow delete: if false;
+      }
+
       // ------------- metrics (신뢰 지표 계측: agent_answer 이벤트) -------------
       match /metrics/{mid} {
         allow read: if isWsMember(wsId);

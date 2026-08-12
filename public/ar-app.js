@@ -62,6 +62,19 @@ function toast(msg, cls = "") {
   setTimeout(() => t.remove(), cls === "levelup" ? 4200 : 2600);
 }
 
+// 실행취소 버튼이 달린 토스트 — 5초 안에 누르면 undoFn 실행 (승격 되돌리기 등)
+function toastUndo(msg, undoFn, ms = 5000) {
+  const t = document.createElement("div");
+  t.className = "toast";
+  t.innerHTML = `<span>${esc(msg)}</span><button class="toast-undo">실행취소</button>`;
+  t.querySelector(".toast-undo").onclick = async () => {
+    t.remove();
+    try { await undoFn(); toast("되돌렸어요."); } catch (e) { toast("되돌리기 실패: " + (e.message || e)); }
+  };
+  $("toaster").appendChild(t);
+  setTimeout(() => t.remove(), ms);
+}
+
 function fmtTime(ts) {
   const d = ts && ts.seconds ? new Date(ts.seconds * 1000) : new Date();
   return d.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
@@ -321,6 +334,9 @@ function selectWorkspace(wsId) {
   state.channels = []; state.agents = []; state.messages = []; state.memories = [];
   state.roomProfiles = {};
   state.unsub.profiles = store.listenRoomProfiles(wsId, (map) => { state.roomProfiles = map; renderMessages(); renderMe(); });
+  state.myReads = {};
+  if (state.unsub.reads) state.unsub.reads();
+  state.unsub.reads = store.listenMyReads(wsId, state.user.uid, (map) => { state.myReads = map; renderChannels(); });
   const ws = state.workspaces.find((w) => w.id === wsId);
   $("ws-name").textContent = ws?.name || "워크스페이스";
   renderWsRail();
@@ -364,7 +380,11 @@ function renderChannels() {
     const li = document.createElement("li");
     li.className = "chan-item" + (ch.id === state.currentChId ? " is-active" : "");
     const n = (ch.agentIds || []).length;
-    li.innerHTML = `<span class="chan-hash">#</span><span>${esc(ch.name)}</span>` + (n ? `<span style="margin-left:auto;font-size:10px;color:var(--txt-mute)">🤖${n}</span>` : "");
+    const seen = state.myReads?.[ch.id]?.seconds || 0;
+    const unread = ch.id !== state.currentChId && (ch.lastMessageAt?.seconds || 0) > seen;
+    li.innerHTML = `<span class="chan-hash">#</span><span>${esc(ch.name)}</span>`
+      + (unread ? `<span class="chan-unread" title="새 메시지"></span>` : "")
+      + (n ? `<span style="margin-left:auto;font-size:10px;color:var(--txt-mute)">🤖${n}</span>` : "");
     li.onclick = () => selectChannel(ch.id);
     ul.appendChild(li);
   }
@@ -388,10 +408,21 @@ function selectChannel(chId) {
   renderChannels();
   renderChatAgents();
   updateChannelControls();
+  markSeen(chId);
   state.unsub.messages = store.listenMessages(state.currentWsId, chId, (list) => {
     state.messages = list;
     renderMessages();
+    markSeen(chId); // 보고 있는 채널의 새 메시지는 읽음 처리
   });
+}
+
+// 읽음 기록 — 스냅샷마다 쓰지 않도록 채널당 5초 스로틀
+const _seenAt = {};
+function markSeen(chId) {
+  const now = Date.now();
+  if (_seenAt[chId] && now - _seenAt[chId] < 5000) return;
+  _seenAt[chId] = now;
+  store.markChannelSeen(state.currentWsId, state.user.uid, chId);
 }
 
 function currentChannel() { return state.channels.find((c) => c.id === state.currentChId) || null; }
@@ -642,9 +673,9 @@ function msgHtml(m) {
     : "";
   // 🧠 근거 각주: 에이전트가 실제로 활용한 팀 학습 지식 표시 (신뢰 + "진짜 기억한다" 증명)
   const srcs = isAgent && Array.isArray(m.sources) && m.sources.length
-    ? `<div class="msg-sources">🧠 근거: ${m.sources.map((s) => `<span>${esc(s)}</span>`).join(" · ")}</div>`
+    ? `<div class="msg-sources">🧠 근거: ${m.sources.map((s, i) => `<span class="src-link" data-kid="${esc((m.sourceKids || [])[i] || "")}" title="클릭하면 원본 지식·출처로 이동">${esc(s)}</span>`).join(" · ")}</div>`
     : (isAgent && m.agentId ? `<div class="msg-nosrc">일반 지식으로 답변 — 팀 기억 미사용</div>` : "");
-  return `<div class="msg${mine ? " mine" : ""}">${ava}<div class="msg-body">
+  return `<div class="msg${mine ? " mine" : ""}" data-msg-id="${m.id}">${ava}<div class="msg-body">
     <div class="msg-top"><span class="msg-name ${isAgent ? "agent" : ""}${mine ? " me" : ""}">${esc(dispName)}</span>${badge}<span class="msg-time">${fmtTime(m.createdAt)}</span></div>
     ${m.content ? `<div class="msg-text">${highlightMentions(m.content)}</div>` : ""}${img}${srcs}${praise}</div>${del}</div>`;
 }
@@ -675,13 +706,17 @@ $("messages").addEventListener("click", async (e) => {
     try {
       // 공동 지식은 한 번만 저장 — 워크스페이스의 모든 에이전트가 함께 읽는다
       const content = `${msg.senderName}: ${msg.content}`;
-      await store.addKnowledge(state.currentWsId, {
+      const kRef = await store.addKnowledge(state.currentWsId, {
         content, promoted: true, sourceChannelId: state.currentChId,
         sourceMessageId: msg.id, learnedFrom: msg.senderName, promotedBy: state.user.uid,
       });
       for (const a of channelAgents()) await awardExp(a.id, EXP.LEARN, 1);
       await store.markMessagePromoted(state.currentWsId, state.currentChId, msg.id);
-      toast("🧠 팀 지식으로 승격 — 이 방의 모든 에이전트가 우선 반영합니다.");
+      const wsId = state.currentWsId, chId = state.currentChId;
+      toastUndo("🧠 팀 지식으로 승격했어요.", async () => {
+        await store.deleteKnowledge(wsId, kRef.id);
+        await store.unmarkMessagePromoted(wsId, chId, msg.id);
+      });
     } catch (err) { toast("승격 실패: " + (err.message || err)); proBtn.disabled = false; }
     return;
   }
@@ -713,6 +748,39 @@ $("messages").addEventListener("click", async (e) => {
     }
     try { await store.deleteMessage(state.currentWsId, state.currentChId, delBtn.dataset.msg); toast("메시지를 삭제했어요."); }
     catch (err) { toast("삭제 실패: " + (err.message || err)); }
+    return;
+  }
+  // 🧠 각주 클릭 → 원본 메시지로 점프, 없으면 지식 상세 (출처 사슬)
+  const srcEl = e.target.closest(".src-link");
+  if (srcEl) {
+    const kid = srcEl.dataset.kid;
+    if (!kid) { toast("이 답변은 이관 전 기억이라 원본 연결이 없어요."); return; }
+    try {
+      const k = await store.getKnowledge(state.currentWsId, kid);
+      if (!k) { toast("지식이 삭제됐어요."); return; }
+      // 같은 채널에 원본 메시지가 로드돼 있으면 점프 + 하이라이트
+      const target = k.sourceMessageId && k.sourceChannelId === state.currentChId
+        ? $("messages").querySelector(`[data-msg-id="${k.sourceMessageId}"]`) : null;
+      if (target) {
+        target.scrollIntoView({ behavior: "smooth", block: "center" });
+        target.classList.add("msg-flash");
+        setTimeout(() => target.classList.remove("msg-flash"), 2200);
+        return;
+      }
+      // 아니면 지식 상세 모달 (전문 + 출처 + 날짜)
+      const chName = (state.channels.find((c) => c.id === k.sourceChannelId) || {}).name;
+      const when = k.createdAt?.seconds ? new Date(k.createdAt.seconds * 1000).toLocaleString("ko-KR") : "";
+      openModal(`
+        <h3>🧠 지식 원본</h3>
+        <ul class="mem-list"><li class="mem-item${k.promoted ? " promoted" : ""}">
+          <div class="mem-meta"><span class="mem-badge${k.promoted ? " p" : ""}">${k.promoted ? "🧠 승격" : "자동"}</span>
+          ${k.masked ? `<span class="mem-badge mask">🔒 마스킹</span>` : ""}</div>
+          ${esc(k.content)}
+          <div class="mem-src">${[k.sourceAgentName ? `🤖 ${esc(k.sourceAgentName)}` : "", chName ? `# ${esc(chName)}` : "", k.learnedFrom ? `${esc(k.learnedFrom)}님 대화` : "", when].filter(Boolean).join(" · ")}</div>
+        </li></ul>
+        <div class="modal-actions"><button class="btn btn-primary" id="src-close">닫기</button></div>`);
+      $("src-close").onclick = closeModal;
+    } catch (err) { toast("원본을 열지 못했어요: " + (err.message || err)); }
     return;
   }
   // 👎 아쉬운 답변 — 인용된 지식 신뢰도 강등 (부패 루프)
@@ -1002,8 +1070,9 @@ async function agentSpeak(agent, userText, awardAnswer = true) {
     const memories = retrieval.texts;
     const recent = state.messages.slice(-8).map((m) => ({ senderName: m.senderName, content: m.content }));
     res = await ai.respond({ agent, memories, recent, userName: meName(), userText, levelName: levelInfo(agent.level).name });
+    const cites = (res.sources || []).map((n) => ({ t: String(memories[n - 1] || "").slice(0, 70), kid: retrieval.meta.ids[n - 1] || "" })).filter((c) => c.t);
     const ref = await store.sendMessage(wsId, chId, { senderId: agent.id, senderType: "agent", senderName: agent.name, content: res.reply, agentId: agent.id,
-      sources: (res.sources || []).map((n) => String(memories[n - 1] || "").slice(0, 70)).filter(Boolean) });
+      sources: cites.map((c) => c.t), sourceKids: cites.map((c) => c.kid) });
     recordAnswerMetric({ wsId, agent, ref, res, retrieval, t0 });
     if (res.ok && awardAnswer) await awardExp(agent.id, EXP.ANSWER, 0, 1);
   } catch (err) { console.error(err); }
@@ -1119,10 +1188,11 @@ async function triggerAgent(agent, userText) {
       agent, memories, recent, userName: meName(), userText,
       levelName: levelInfo(agent.level).name,
     });
+    const cites = (res.sources || []).map((n) => ({ t: String(memories[n - 1] || "").slice(0, 70), kid: retrieval.meta.ids[n - 1] || "" })).filter((c) => c.t);
     const ref = await store.sendMessage(wsId, chId, {
       senderId: agent.id, senderType: "agent", senderName: agent.name,
       content: res.reply, agentId: agent.id,
-      sources: (res.sources || []).map((n) => String(memories[n - 1] || "").slice(0, 70)).filter(Boolean),
+      sources: cites.map((c) => c.t), sourceKids: cites.map((c) => c.kid),
     });
     recordAnswerMetric({ wsId, agent, ref, res, retrieval, t0 });
     if (res.ok) {
@@ -1161,7 +1231,8 @@ async function runRoundtable(participants, topic, userText) {
     state.pending.push({ id: agent.id, name: agent.name, hue, level: agent.level });
     renderMessages();
     try {
-      const memories = (await store.fetchTopMemories(wsId, agent.id, 5, `${topic || ""} ${userText || ""}`)).texts;
+      const retrieval = await store.fetchTopMemories(wsId, agent.id, 5, `${topic || ""} ${userText || ""}`);
+      const memories = retrieval.texts;
       const others = participants.filter((a) => a.id !== agent.id).map((a) => a.name);
       const res = await ai.respond({
         agent, memories, recent: baseRecent, userName: meName(), userText,
@@ -1171,6 +1242,7 @@ async function runRoundtable(participants, topic, userText) {
       await store.sendMessage(wsId, chId, {
         senderId: agent.id, senderType: "agent", senderName: agent.name, content: res.reply, agentId: agent.id,
         sources: (res.sources || []).map((n) => String(memories[n - 1] || "").slice(0, 70)).filter(Boolean),
+        sourceKids: (res.sources || []).map((n) => retrieval.meta.ids[n - 1] || "").slice(0, 3),
       });
       soFar.push({ name: agent.name, content: res.reply });
       if (res.ok) {

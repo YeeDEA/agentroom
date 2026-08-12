@@ -195,7 +195,7 @@ export function listenChannels(wsId, cb) {
 
 // ---------- 메시지 ----------
 export async function sendMessage(wsId, chId, msg) {
-  return addDoc(collection(db, "workspaces", wsId, "channels", chId, "messages"), {
+  const ref = await addDoc(collection(db, "workspaces", wsId, "channels", chId, "messages"), {
     senderId: msg.senderId,
     senderType: msg.senderType, // 'user' | 'agent'
     senderName: msg.senderName,
@@ -205,8 +205,34 @@ export async function sendMessage(wsId, chId, msg) {
     agentId: msg.agentId || null,
     ...(msg.image ? { image: msg.image } : {}),
     ...(msg.sources && msg.sources.length ? { sources: msg.sources.slice(0, 3) } : {}),
+    ...(msg.sourceKids && msg.sourceKids.length ? { sourceKids: msg.sourceKids.slice(0, 3) } : {}),
     createdAt: serverTimestamp(),
   });
+  // 안읽음 배지용 — 채널의 마지막 활동 시각 (실패해도 메시지 전송엔 영향 없음)
+  updateDoc(doc(db, "workspaces", wsId, "channels", chId), { lastMessageAt: serverTimestamp() }).catch(() => {});
+  return ref;
+}
+
+// ---------- 안읽음 (채널별 마지막 확인 시각) ----------
+export async function markChannelSeen(wsId, uid, chId) {
+  try {
+    await setDoc(doc(db, "workspaces", wsId, "reads", uid), { [chId]: serverTimestamp() }, { merge: true });
+  } catch (_) {}
+}
+export function listenMyReads(wsId, uid, cb) {
+  return onSnapshot(doc(db, "workspaces", wsId, "reads", uid),
+    (snap) => cb(snap.exists() ? snap.data() : {}), () => cb({}));
+}
+
+// 🧠 승격 5초 되돌리기용
+export async function unmarkMessagePromoted(wsId, chId, msgId) {
+  await updateDoc(doc(db, "workspaces", wsId, "channels", chId, "messages", msgId), { promotedToMemory: false });
+}
+
+// 각주 출처 점프용 — 지식 1건 조회
+export async function getKnowledge(wsId, kid) {
+  const snap = await getDoc(doc(db, "workspaces", wsId, "knowledge", kid));
+  return snap.exists() ? { id: snap.id, ...snap.data() } : null;
 }
 
 export async function deleteMessage(wsId, chId, msgId) {

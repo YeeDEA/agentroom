@@ -1,48 +1,51 @@
 /* AgentRoom — 라이트 기본(업무용) + 다크 토글, 8-bit 캐릭터 액센트 */
 :root {
   /* ☀️ 라이트(기본) — 밝고 차분한 업무용 톤 */
-  --bg: #f7f8fc;          /* 채팅 배경 */
-  --bg-2: #ffffff;        /* 사이드바·카드 */
-  --bg-3: #f0f2f8;        /* 입력창·칩 */
-  --bg-4: #e5e8f2;        /* hover·강조 배경 */
-  --rail: #eceef6;        /* 워크스페이스 레일 */
-  --line: #e0e3ee;
-  --txt: #1c1f2e;
-  --txt-dim: #5c6479;
-  --txt-mute: #8b93a7;
-  --accent: #6b5ce7;
-  --accent-2: #5647c4;    /* 라이트에선 더 진하게(대비 확보) */
-  --lime: #2f9e5e;        /* 초록 액센트 — 라이트에선 가독 가능한 채도 */
-  --lime-soft: #e8f7ee;
-  --danger: #e0455f;
-  --gold: #c98a06;
-  --ava-1: #9aa3b8; --ava-2: #6b7488;   /* 사람 아바타 그라데이션 */
-  --me: #2f6db3;                        /* 본인 표시색 */
+  /* 종이·잉크·진초록 — "기억 보관소" (AI-보라 SaaS 룩 탈피) */
+  --bg: #faf9f5;          /* 종이 */
+  --bg-2: #ffffff;
+  --bg-3: #f2f0ea;
+  --bg-4: #e8e5dc;
+  --rail: #f1efe8;
+  --line: #e5e2d8;
+  --txt: #211f1a;         /* 잉크 */
+  --txt-dim: #5c584d;
+  --txt-mute: #94907f;
+  --accent: #2e6e4e;      /* 진초록 — 보존·장부 */
+  --accent-2: #245a40;
+  --lime: #2e6e4e;
+  --lime-soft: #e7f1ea;
+  --danger: #b5483f;
+  --gold: #a07908;
+  --ava-1: #a8a291; --ava-2: #7c776a;
+  --me: #38566b;
+  --mine-bubble: #edeadf;
   --backdrop: rgba(28, 31, 46, .38);
   --shadow: 0 1px 3px rgba(28, 31, 46, .07);
   --shadow-lg: 0 12px 32px rgba(28, 31, 46, .14);
   --radius: 12px;
-  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans KR", Roboto, sans-serif;
+  --font: "Pretendard Variable", Pretendard, -apple-system, "Segoe UI", "Noto Sans KR", sans-serif;
 }
 /* 🌙 다크 토글 */
 :root[data-theme="dark"] {
-  --bg: #0f0d1a;
-  --bg-2: #16132a;
-  --bg-3: #1d1938;
-  --bg-4: #262048;
-  --rail: #0b0916;
-  --line: #2c2650;
-  --txt: #e9e6f7;
-  --txt-dim: #a49dc8;
-  --txt-mute: #6f6795;
-  --accent: #8b7cf6;
-  --accent-2: #b3a6ff;
-  --lime: #c6ff5e;
-  --lime-soft: rgba(198, 255, 94, .14);
-  --danger: #ff6b8b;
-  --gold: #ffd23f;
-  --ava-1: #4a4370; --ava-2: #332e58;
-  --me: #4aa3ff;
+  --bg: #16150f;
+  --bg-2: #1d1c15;
+  --bg-3: #24221a;
+  --bg-4: #2e2c21;
+  --rail: #121109;
+  --line: #34321f;
+  --txt: #ece9dd;
+  --txt-dim: #b0ac9b;
+  --txt-mute: #7b7767;
+  --accent: #63b487;
+  --accent-2: #8acaa6;
+  --lime: #63b487;
+  --lime-soft: rgba(99, 180, 135, .15);
+  --danger: #e08078;
+  --gold: #d9b24a;
+  --ava-1: #56523f; --ava-2: #3b3829;
+  --me: #7fa8c4;
+  --mine-bubble: #2a2f26;
   --backdrop: rgba(6, 4, 14, .7);
   --shadow: 0 1px 3px rgba(0, 0, 0, .3);
   --shadow-lg: 0 12px 32px rgba(0, 0, 0, .45);
@@ -64,7 +67,7 @@ button { font-family: inherit; }
   cursor: pointer; background: var(--bg-4); color: var(--txt); transition: filter .15s, transform .05s; }
 .btn:hover { filter: brightness(1.15); }
 .btn:active { transform: translateY(1px); }
-.btn-primary { background: linear-gradient(135deg, var(--accent), #6f5fe0); color: #fff; }
+.btn-primary { background: var(--accent); color: #fff; }
 .btn-block { width: 100%; }
 .icon-btn { background: transparent; border: 0; color: var(--txt-dim); cursor: pointer; font-size: 18px;
   border-radius: 8px; padding: 4px 8px; line-height: 1; }
@@ -86,7 +89,7 @@ button { font-family: inherit; }
 .auth-card { width: 100%; max-width: 400px; background: var(--bg-2); border: 1px solid var(--line);
   border-radius: 18px; padding: 32px 28px; box-shadow: var(--shadow-lg); }
 .auth-brand { font-size: 26px; text-align: center; letter-spacing: -.5px; }
-.logo-egg { filter: drop-shadow(0 2px 6px rgba(139,124,246,.6)); }
+.logo-egg { }
 .auth-tag { text-align: center; color: var(--txt-dim); font-size: 13px; margin: 6px 0 22px; }
 .auth-tabs { display: flex; gap: 6px; background: var(--bg); padding: 5px; border-radius: 12px; margin-bottom: 18px; }
 .auth-tab { flex: 1; border: 0; background: transparent; color: var(--txt-dim); padding: 9px; border-radius: 9px;
@@ -112,7 +115,7 @@ button { font-family: inherit; }
   display: grid; place-items: center; font-weight: 700; font-size: 18px; cursor: pointer; border: 0;
   transition: border-radius .15s, background .15s; position: relative; }
 .ws-icon:hover { border-radius: 12px; background: var(--accent); color: #fff; }
-.ws-icon.is-active { border-radius: 12px; background: linear-gradient(135deg, var(--accent), #6f5fe0); color: #fff; }
+.ws-icon.is-active { border-radius: 12px; background: var(--accent); color: #fff; }
 .ws-icon.is-active::before { content: ""; position: absolute; left: -12px; top: 50%; transform: translateY(-50%);
   width: 5px; height: 26px; background: #fff; border-radius: 0 4px 4px 0; }
 .ws-add { background: var(--bg-3); color: var(--lime); font-size: 24px; }
@@ -181,7 +184,7 @@ button { font-family: inherit; }
 .cmd-list { display: flex; flex-direction: column; gap: 2px; margin-bottom: 14px; }
 .cmd-tag { font-size: 10px; padding: 1px 6px; border-radius: 6px; margin-left: auto; white-space: nowrap; }
 .cmd-tag.collab { background: var(--lime-soft); color: var(--lime); }
-.cmd-tag.synth { background: rgba(139,124,246,.18); color: var(--accent-2); }
+.cmd-tag.synth { background: var(--lime-soft); color: var(--accent-2); }
 .export-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; }
 .export-fmt { text-align: center; }
 .cmd-row { display: flex; gap: 12px; padding: 7px 0; border-top: 1px solid var(--line); align-items: baseline; }
@@ -232,7 +235,7 @@ button { font-family: inherit; }
 .mini-btn.danger:hover { border-color: var(--danger); color: var(--danger); }
 
 /* 맥락 압축 카드 */
-.summary-card { border: 1px solid var(--accent); background: linear-gradient(180deg, rgba(139,124,246,.10), var(--bg-3));
+.summary-card { border: 1px solid var(--accent); background: var(--bg-2);
   border-radius: 12px; padding: 14px 16px; align-self: stretch; }
 .summary-card h4 { margin: 0 0 8px; font-size: 13px; color: var(--accent-2); display: flex; align-items: center; gap: 6px; }
 .summary-card .sc-time { font-size: 11px; color: var(--txt-mute); font-weight: 400; margin-left: auto; }
@@ -296,7 +299,7 @@ button { font-family: inherit; }
 .wiki-count { font-size: 13px; color: var(--txt-mute); font-weight: 600; }
 .wiki-contribs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
 .wiki-contrib { font-size: 11px; background: var(--bg-3); border: 1px solid var(--line);
-  border-radius: 999px; padding: 3px 10px; color: var(--txt-dim); }
+  border-radius: 6px; padding: 3px 9px; color: var(--txt-dim); }
 .wiki-contrib b { color: var(--accent-2); }
 .wiki-search { width: 100%; background: var(--bg); border: 1px solid var(--line); color: var(--txt);
   padding: 9px 12px; border-radius: 10px; font-size: 13px; margin-bottom: 10px; }
@@ -331,9 +334,9 @@ button { font-family: inherit; }
 /* 🧠 근거 각주 — 에이전트가 활용한 팀 학습 지식 */
 .msg-sources { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin-top: 7px; font-size: 11px; }
 .msg-sources::before { content: "🧠 근거"; color: var(--txt-mute); font-weight: 700; margin-right: 2px; }
-.msg-sources span { background: var(--bg-2); border: 1px solid var(--line); color: var(--txt-dim);
-  border-radius: 999px; padding: 3px 10px; max-width: 260px; white-space: nowrap; overflow: hidden;
-  text-overflow: ellipsis; box-shadow: var(--shadow); }
+.msg-sources span { background: var(--bg-3); border: 1px solid var(--line); color: var(--txt-dim);
+  border-radius: 6px; padding: 3px 9px; max-width: 260px; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; }
 .msg-sources span:hover { border-color: var(--accent); color: var(--accent-2); }
 /* 첨부 버튼 */
 .attach-btn { align-self: flex-end; background: var(--bg-3); border: 1px solid var(--line); color: var(--txt-dim);
@@ -359,7 +362,7 @@ button { font-family: inherit; }
 .msg-badge { font-size: 10px; background: var(--accent); color:#fff; padding: 1px 6px; border-radius: 6px; font-weight: 700; }
 .msg-time { font-size: 11px; color: var(--txt-mute); }
 .msg-text { font-size: 14px; line-height: 1.55; color: var(--txt); white-space: pre-wrap; word-break: break-word; margin-top: 2px; }
-.msg-text .mention { color: var(--accent-2); background: rgba(139,124,246,.15); border-radius: 4px; padding: 0 3px; font-weight: 600; }
+.msg-text .mention { color: var(--accent-2); background: var(--lime-soft); border-radius: 4px; padding: 0 3px; font-weight: 600; }
 .msg-actions { margin-top: 4px; }
 .praise-btn { background: transparent; border: 1px solid var(--line); color: var(--txt-mute); font-size: 12px;
   border-radius: 999px; padding: 2px 10px; cursor: pointer; }
@@ -453,7 +456,7 @@ button { font-family: inherit; }
   display: flex; flex-direction: column; gap: 8px; align-items: center; }
 .toast { background: var(--bg-4); border: 1px solid var(--line); color: var(--txt); padding: 11px 18px;
   border-radius: 12px; font-size: 13px; box-shadow: var(--shadow-lg); animation: pop .3s ease; }
-.toast.levelup { background: linear-gradient(135deg,#3a2f6e,#5b3fae); border-color: var(--accent);
+.toast.levelup { background: var(--accent); color: #fff; border-color: var(--accent-2);
   font-weight: 700; font-size: 14px; }
 @keyframes pop { from{ opacity: 0; transform: translateY(10px) } to{ opacity: 1; transform: translateY(0) } }
 
@@ -464,7 +467,7 @@ button { font-family: inherit; }
 .empty-start-emoji { font-size: 40px; }
 .empty-start-title { font-size: 19px; font-weight: 800; letter-spacing: -.3px; }
 .empty-start-sub { margin: 0; font-size: 13px; color: var(--txt-dim); line-height: 1.6; }
-.empty-start-cta { margin-top: 10px; animation: cta-pulse 2.4s ease-in-out infinite; }
+.empty-start-cta { margin-top: 10px; }
 .empty-start-alt { margin: 6px 0 0; font-size: 12px; color: var(--txt-mute); }
 .empty-start-alt code { background: var(--bg-3); border: 1px solid var(--line);
   border-radius: 6px; padding: 1px 6px; }
@@ -484,3 +487,121 @@ button { font-family: inherit; }
   .app-view.show-chat .sidebar { display: none; }
   .app-view.show-chat .chat { display: flex; }
 }
+
+
+/* ================================================================
+   V2 전면 개편 레이어 (2026-08-12) — 라이트 업무톤·신뢰 배지·팔레트는
+   유지(docs/08 유지 규칙), 얼굴을 바꾼다: 서체·말풍선·답변 카드·
+   헤더·컴포저·여백 체계. 되돌리려면 이 블록만 지우면 된다.
+   ================================================================ */
+:root { --radius: 12px; }
+
+body { letter-spacing: -0.011em; }
+
+/* 채팅 캔버스: 읽기 폭 제한 + 넉넉한 여백 */
+.messages { padding: 26px clamp(16px, 6%, 72px) 18px; }
+.messages > * + * { margin-top: 14px; }
+
+/* 메시지 공통: 아바타 크게, 정렬 정돈 */
+.msg { gap: 10px; }
+.msg .msg-ava, .msg .msg-ava.user { width: 34px; height: 34px; border-radius: 12px; }
+
+/* 에이전트/타인 = 답변 카드 (Perplexity의 '답은 문서다' 문법) */
+.msg:not(.mine) .msg-body { background: var(--bg-2); border: 1px solid var(--line);
+  border-radius: 3px 12px 12px 12px; padding: 10px 14px 11px; box-shadow: none;
+  max-width: min(760px, 92%); }
+.msg:not(.mine) .msg-text { line-height: 1.65; }
+
+/* 내 메시지 = 오른쪽 말풍선 (카톡 문법 — 낯설지 않게) */
+.msg.mine { flex-direction: row-reverse; }
+.msg.mine .msg-body { background: var(--mine-bubble); border-radius: 12px 3px 12px 12px;
+  padding: 9px 14px 10px; max-width: min(640px, 86%); }
+.msg.mine .msg-top { justify-content: flex-end; }
+.msg.mine .msg-text { background: transparent; padding: 0; margin-left: 0; }
+.msg.mine .msg-tools { right: auto; left: 4px; }
+
+/* 승격 마커: 카드 문법에 맞게 */
+.msg.promoted-msg .msg-body { border-left: 3px solid var(--lime); margin-left: 0; padding-left: 12px; }
+
+/* 헤더: 반투명 고정 바 + 알약 버튼 */
+.chat-head { background: color-mix(in srgb, var(--bg-2) 82%, transparent);
+  backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); box-shadow: none;
+  padding: 10px 18px; gap: 8px; }
+.chat-title { font-weight: 800; letter-spacing: -0.02em; }
+.head-btn, .auto-toggle { border: 1px solid var(--line); background: var(--bg-2);
+  border-radius: 8px; padding: 5px 11px; font-size: 12px; color: var(--txt-dim); }
+.head-btn:hover { border-color: var(--accent); color: var(--txt); }
+
+/* 컴포저: 떠 있는 캡슐 */
+.composer { margin: 6px 14px 4px; background: var(--bg-2); border: 1px solid var(--line);
+  border-radius: 12px; box-shadow: var(--shadow); padding: 6px 8px; }
+.composer textarea { background: transparent; border: 0; }
+.composer textarea:focus { outline: none; }
+.composer:focus-within { border-color: var(--accent); }
+#composer-send { border-radius: 10px; padding: 9px 18px; font-weight: 700; }
+.composer-hint { margin: 4px 22px 10px; opacity: .75; }
+
+/* 사이드바: 위계 정돈 */
+.side-title { font-size: 10.5px; letter-spacing: .8px; }
+.chan-item { padding: 8px 10px; border-radius: 9px; }
+.chan-item.is-active { background: transparent; color: var(--txt); font-weight: 800;
+  box-shadow: inset 3px 0 0 var(--accent); border-radius: 0 9px 9px 0; }
+.chan-item.is-active .chan-hash { color: var(--accent); }
+.ws-head { padding: 15px 16px 13px; }
+
+/* 카드류: 헤더 스트립 */
+.summary-card { border-radius: 16px; box-shadow: var(--shadow); }
+.summary-card h4 { border-bottom: 1px solid var(--line); padding-bottom: 8px; }
+
+/* 근거·후속 칩과 배지의 호흡 */
+.msg-sources { margin-top: 9px; }
+.msg-actions { margin-top: 8px; }
+
+/* 스크롤바 */
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-thumb { background: var(--bg-4); border-radius: 8px; }
+*::-webkit-scrollbar-thumb:hover { background: var(--txt-mute); }
+*::-webkit-scrollbar-track { background: transparent; }
+
+
+/* ================================================================
+   V3 — 구조·모션 (Slack/Telegram 결, 정적이지 않게). AI 티(이모지
+   아이콘·글로우·균질 카드) 제거. 색이 아니라 움직임과 구조로 차별.
+   ================================================================ */
+/* 아이콘 정렬 */
+.icon-btn svg, .mini-add svg, .attach-btn svg, .head-btn svg { display: block; }
+.icon-btn { display: grid; place-items: center; width: 30px; height: 30px; padding: 0; }
+.mini-add { display: grid; place-items: center; }
+
+/* 메시지 등장 모션 — 화면이 살아있게 */
+@keyframes msg-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.msg { animation: msg-in .22s cubic-bezier(.2,.7,.3,1) both; }
+.summary-card { animation: msg-in .28s cubic-bezier(.2,.7,.3,1) both; }
+
+/* pending(생각 중) 점 애니메이션 강조 */
+.msg.thinking { opacity: .85; }
+
+/* 채널 전환·hover 모션 */
+.chan-item { transition: background .14s, box-shadow .14s, color .14s, padding-left .14s; }
+.chan-item:hover { padding-left: 13px; }
+.ws-icon { transition: transform .16s cubic-bezier(.2,.7,.3,1), border-radius .16s, background .16s; }
+.ws-icon:hover { transform: translateY(-2px); }
+.ws-icon.is-active { transform: none; }
+
+/* 보내기 버튼 — 눌림 피드백 */
+#composer-send { transition: transform .06s, filter .14s; }
+#composer-send:active { transform: scale(.96); }
+
+/* 후속 질문 추천 팔레트: 위로 슬라이드 */
+@keyframes pal-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.cmd-palette:not([hidden]) { animation: pal-in .16s ease both; }
+
+/* 아바타 살짝 떠오르기 (정적 탈피) */
+.msg-ava { transition: transform .16s; }
+.msg:hover .msg-ava { transform: scale(1.06) rotate(-2deg); }
+
+/* 스크롤 진입 부드럽게 */
+.messages { scroll-behavior: smooth; }
+
+/* 라이트에서 카드 그림자 더 은은하게(플랫 아님) */
+:root { --shadow: 0 1px 2px rgba(33,31,26,.05), 0 4px 12px rgba(33,31,26,.04); }

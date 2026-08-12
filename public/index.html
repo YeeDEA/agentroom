@@ -6,6 +6,8 @@
   <title>AgentRoom — 팀의 집단지성을 먹고 자라는 AI 워크스페이스</title>
   <meta name="description" content="디스코드처럼 채널에서 팀과 대화하고, 알에서 깨어나 자라는 AI 에이전트를 함께 키우는 협업 워크스페이스." />
   <!-- 초기 로딩 속도: CDN 연결을 미리 열고, 첫 화면에 필요한 모듈을 병렬 선반입 -->
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
   <link rel="preconnect" href="https://www.gstatic.com" crossorigin />
   <link rel="dns-prefetch" href="https://firestore.googleapis.com" />
   <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/12.3.0/firebase-app.js" />
@@ -78,14 +80,14 @@
     <nav class="sidebar" id="sidebar">
       <div class="ws-head">
         <div class="ws-head-name" id="ws-name">워크스페이스</div>
-        <button class="icon-btn" id="ws-wiki-btn" title="팀 위키 — 팀이 쌓은 모든 지식">📚</button>
-        <button class="icon-btn" id="ws-invite-btn" title="초대 / 워크스페이스 ID">👥</button>
+        <button class="icon-btn" id="ws-wiki-btn" title="팀 위키 — 팀이 쌓은 모든 지식" aria-label="팀 위키"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z"/><path d="M4 20.5A2.5 2.5 0 0 1 6.5 18H20v3H6.5A2.5 2.5 0 0 1 4 20.5z"/></svg></button>
+        <button class="icon-btn" id="ws-invite-btn" title="초대 / 워크스페이스 ID" aria-label="멤버 초대"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 20a5.5 5.5 0 0 1 11 0"/><path d="M18 8v6M15 11h6"/></svg></button>
       </div>
 
       <div class="side-section">
         <div class="side-title">
           <span>채널</span>
-          <button class="mini-add" id="add-channel-btn" title="채널 추가">＋</button>
+          <button class="mini-add" id="add-channel-btn" title="채널 추가" aria-label="채널 추가"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
         </div>
         <ul class="channel-list" id="channel-list"></ul>
       </div>
@@ -93,7 +95,7 @@
       <div class="side-section">
         <div class="side-title">
           <span>에이전트</span>
-          <button class="mini-add" id="add-agent-btn" title="에이전트 추가">＋</button>
+          <button class="mini-add" id="add-agent-btn" title="에이전트 추가" aria-label="에이전트 추가"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
         </div>
         <ul class="agent-list" id="agent-list"></ul>
       </div>
@@ -103,9 +105,9 @@
           <span class="me-ava" id="me-ava">?</span>
           <span class="me-email" id="me-email"></span>
         </button>
-        <button class="icon-btn" id="theme-btn" title="라이트 / 다크 전환">🌙</button>
-        <button class="icon-btn" id="brain-btn" title="두뇌 설정 (Gemini / Hermes)">⚙️</button>
-        <button class="icon-btn" id="logout-btn" title="로그아웃">⎋</button>
+        <button class="icon-btn" id="theme-btn" title="라이트 / 다크 전환" aria-label="테마 전환"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13.5A8 8 0 1 1 10.5 4a6.3 6.3 0 0 0 9.5 9.5z"/></svg></button>
+        <button class="icon-btn" id="brain-btn" title="두뇌 설정 (Gemini / Hermes)" aria-label="두뇌 설정"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9L17 7M7 17l-2.1 2.1"/></svg></button>
+        <button class="icon-btn" id="logout-btn" title="로그아웃" aria-label="로그아웃"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5M21 12H9"/></svg></button>
       </div>
     </nav>
 
@@ -116,16 +118,16 @@
         <label class="auto-toggle" id="auto-toggle-wrap" hidden title="켜면 @멘션 없이도, 질문(?)에 채널 대표 에이전트가 자율로 답합니다">
           <input type="checkbox" id="auto-toggle" /> 자율개입
         </label>
-        <button class="head-btn" id="summarize-btn" hidden title="긴 대화를 핵심/쟁점으로 압축한 카드를 채널에 남깁니다">🧵 대화 요약</button>
-        <button class="head-btn" id="export-btn" hidden title="이 채널의 대화·산출물을 파일로 내보내기">⤓ 내보내기</button>
+        <button class="head-btn" id="summarize-btn" hidden title="긴 대화를 핵심/쟁점으로 압축한 카드를 채널에 남깁니다">대화 요약</button>
+        <button class="head-btn" id="export-btn" hidden title="이 채널의 대화·산출물을 파일로 내보내기">내보내기</button>
         <div class="chat-agents" id="chat-agents"></div>
       </header>
       <div class="messages" id="messages"></div>
       <div class="cmd-palette" id="cmd-palette" hidden></div>
       <div class="cmd-palette" id="mention-palette" hidden></div>
       <form class="composer" id="composer">
-        <button class="attach-btn" id="suggest-btn" type="button" title="뭘 물어볼지 모를 때 — 팀 지식 기반 질문 추천">✨</button>
-        <button class="attach-btn" id="attach-btn" type="button" title="이미지 첨부 (자동 압축)">📎</button>
+        <button class="attach-btn" id="suggest-btn" type="button" title="뭘 물어볼지 모를 때 — 팀 지식 기반 질문 추천" aria-label="질문 추천"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 4.6L18.5 9.5l-4.6 1.9L12 16l-1.9-4.6L5.5 9.5l4.6-1.9z"/><path d="M18 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z"/></svg></button>
+        <button class="attach-btn" id="attach-btn" type="button" title="이미지 첨부 (자동 압축)" aria-label="이미지 첨부"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.5l-8.5 8.5a5 5 0 0 1-7-7l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7l-8.5 8.5a1.6 1.6 0 0 1-2.3-2.3l7.8-7.8"/></svg></button>
         <input id="attach-input" type="file" accept="image/*" hidden />
         <textarea id="composer-input" rows="1" placeholder="메시지 입력…  에이전트를 부르려면 @이름" autocomplete="off"></textarea>
         <button class="btn btn-primary" id="composer-send" type="submit">보내기</button>

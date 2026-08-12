@@ -379,21 +379,34 @@ function startWorkspaces() {
 const WS_TINTS = ["#2e6e4e", "#b5734a", "#4a6b8a", "#8a5a7a", "#a07908", "#3f7d78"];
 function wsHash(s) { let h = 2166136261; for (const c of String(s)) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619) >>> 0; } return h; }
 
-// Identicon: 이름 해시로 5×5 좌우대칭 문양 SVG 생성 (방마다 고유·규칙적, GitHub 방식)
+// 자연 라인아트 방 아이콘 — 나비·잎·낙엽·물결·새싹·산·물방울·꽃·조개·눈송이를
+// 한 획 선으로 딴 SVG. 방 이름 해시로 배정(방마다 다른 자연물).
+const NATURE_ICONS = [
+  // 나비
+  `<path d="M12 6c-1.5 3-1.5 9 0 12M12 6c-1.5 3-1.5 9 0 12M12 8C9.5 4 3.5 4 4 9c.4 4 5.5 4.5 8 1M12 8c2.5-4 8.5-4 8 1-.4 4-5.5 4.5-8 1M12 13c-2 3-6.5 3.5-7 .5M12 13c2 3 6.5 3.5 7 .5"/>`,
+  // 잎사귀
+  `<path d="M5 19C4 11 10 4 19 5c1 9-6 15-14 14zM8 16c3-3 6-6 9-8"/>`,
+  // 낙엽 (단풍)
+  `<path d="M12 4v16M12 8l-5-3M12 8l5-3M12 13l-6-2M12 13l6-2M12 18l-4 1M12 18l4 1"/>`,
+  // 물결
+  `<path d="M3 8c2-2 4-2 6 0s4 2 6 0 4-2 6 0M3 13c2-2 4-2 6 0s4 2 6 0 4-2 6 0M3 18c2-2 4-2 6 0s4 2 6 0 4-2 6 0"/>`,
+  // 새싹
+  `<path d="M12 20v-9M12 11c0-4 3-6 7-6 0 4-3 6-7 6zM12 13C12 9 9 7 5 7c0 4 3 6 7 6z"/>`,
+  // 산
+  `<path d="M3 18l6-10 4 6 2-3 6 7zM9 8l2 3M15 11l-1.5 2.2"/>`,
+  // 물방울
+  `<path d="M12 4c4 5 6 8 6 11a6 6 0 0 1-12 0c0-3 2-6 6-11zM9 14a3 3 0 0 0 3 3"/>`,
+  // 꽃
+  `<path d="M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6M12 9c0-4 4-5 4-5M12 9c0-4-4-5-4-5M15 12c4 0 5 4 5 4M9 12c-4 0-5 4-5 4M13 15c1 3 4 3 4 3M11 15c-1 3-4 3-4 3"/>`,
+  // 조개
+  `<path d="M12 5C6 5 3 11 3 18h18c0-7-3-13-9-13zM12 5v13M8 18l1.5-11M16 18l-1.5-11"/>`,
+  // 눈송이
+  `<path d="M12 3v18M4 7.5l16 9M20 7.5l-16 9M12 6l-2.5-2M12 6l2.5-2M12 18l-2.5 2M12 18l2.5 2"/>`,
+];
 function identiconSVG(name, tint) {
-  let h = wsHash(name);
-  const next = () => { h ^= h << 13; h ^= h >>> 17; h ^= h << 5; h >>>= 0; return h; };
-  const cells = [];
-  for (let col = 0; col < 3; col++) {
-    for (let row = 0; row < 5; row++) {
-      if (next() % 2 === 0) { // 50% 채움
-        cells.push([col, row]);
-        if (col < 2) cells.push([4 - col, row]); // 좌우 대칭
-      }
-    }
-  }
-  const rects = cells.map(([c, r]) => `<rect x="${c * 4}" y="${r * 4}" width="4" height="4"/>`).join("");
-  return `<svg viewBox="0 0 20 20" width="22" height="22" fill="currentColor" shape-rendering="crispEdges" style="color:${tint}">${rects}</svg>`;
+  let x = wsHash(name); x ^= x >>> 16; x = Math.imul(x, 0x45d9f3b) >>> 0; x = (x ^ (x >>> 16)) >>> 0; // avalanche
+  const icon = NATURE_ICONS[x % NATURE_ICONS.length];
+  return `<svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="${tint}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${icon}</svg>`;
 }
 function renderWsRail() {
   const rail = $("ws-rail");

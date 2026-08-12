@@ -41,6 +41,14 @@ function safeImageSrc(u) {
 }
 // 이모지(서로게이트 쌍) 안전하게 첫 글자 추출 — charAt(0)은 이모지를 반쪽 내서 깨짐
 const firstGrapheme = (s) => [...String(s ?? "").trim()][0] || "?";
+// 워크스페이스 이니셜: 앞머리 이모지·기호를 건너뛰고 첫 '글자'(한글/영문/숫자)를 쓴다.
+// 컬러 이모지 아이콘을 팔레트 기반 무채색 이니셜로 대체하기 위함.
+const wsInitial = (s) => {
+  for (const ch of String(s ?? "").trim()) {
+    if (/[\p{L}\p{N}]/u.test(ch)) return ch.toUpperCase();
+  }
+  return "#";
+};
 // 방 프로필(이모지/닉네임) 우선, 없으면 이름 첫 글자
 function avatarEmojiFor(uid) {
   const p = state.roomProfiles[uid];
@@ -346,20 +354,33 @@ function startWorkspaces() {
   });
 }
 
+// 워크스페이스 스와치 — 글자 없이 팔레트 파생 색 + 기하 마크(무늬로 구분)
+const WS_TINTS = ["#2e6e4e", "#b5734a", "#4a6b8a", "#8a5a7a", "#a07908", "#3f7d78"];
+function wsHash(s) { let h = 0; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; }
 function renderWsRail() {
   const rail = $("ws-rail");
   rail.innerHTML = "";
   for (const ws of state.workspaces) {
     const b = document.createElement("button");
-    b.className = "ws-icon" + (ws.id === state.currentWsId ? " is-active" : "");
-    b.textContent = firstGrapheme(ws.name).toUpperCase();
+    const active = ws.id === state.currentWsId;
+    b.className = "ws-icon" + (active ? " is-active" : "");
+    const h = wsHash(ws.name);
+    const tint = WS_TINTS[h % WS_TINTS.length];
+    const shape = h % 3; // 0 원 / 1 사각 / 2 삼각 — 색이 비슷해도 무늬로 구별
+    b.style.setProperty("--tint", tint);
+    const mark = shape === 0
+      ? `<circle cx="12" cy="12" r="5.5"/>`
+      : shape === 1
+        ? `<rect x="6.5" y="6.5" width="11" height="11" rx="2.5"/>`
+        : `<path d="M12 6l6 11H6z"/>`;
+    b.innerHTML = `<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">${mark}</svg>`;
     b.title = ws.name;
     b.onclick = () => selectWorkspace(ws.id);
     rail.appendChild(b);
   }
   const add = document.createElement("button");
   add.className = "ws-icon ws-add";
-  add.textContent = "＋";
+  add.innerHTML = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>`;
   add.title = "워크스페이스 추가 / 참여";
   add.onclick = openWorkspaceModal;
   rail.appendChild(add);
@@ -431,7 +452,7 @@ function renderChannels() {
     const unread = ch.id !== state.currentChId && (ch.lastMessageAt?.seconds || 0) > seen;
     li.innerHTML = `<span class="chan-hash">#</span><span>${esc(ch.name)}</span>`
       + (unread ? `<span class="chan-unread" title="새 메시지"></span>` : "")
-      + (n ? `<span style="margin-left:auto;font-size:10px;color:var(--txt-mute)">🤖${n}</span>` : "");
+      + (n ? `<span class="chan-agentcount"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="16" height="11" rx="2.5"/><path d="M12 8V4.5M9.5 13h.01M14.5 13h.01"/></svg>${n}</span>` : "");
     li.onclick = () => selectChannel(ch.id);
     ul.appendChild(li);
   }
@@ -744,21 +765,27 @@ function msgHtml(m) {
         ? `<div class="msg-ava user emoji">${esc(emoji)}</div>`
         : `<div class="msg-ava user">${esc(firstGrapheme(dispName).toUpperCase())}</div>`);
   const badge = isAgent ? `<span class="msg-badge">AI</span>` : (mine ? `<span class="msg-badge me">나</span>` : "");
+  const ICON_UP = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 10v10H4V10zM7 10l4-7a2 2 0 0 1 2 2v3h5a2 2 0 0 1 2 2.3l-1.3 6A2 2 0 0 1 16.7 20H7"/></svg>`;
+  const ICON_DOWN = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 14V4h3v10zM17 14l-4 7a2 2 0 0 1-2-2v-3H6a2 2 0 0 1-2-2.3l1.3-6A2 2 0 0 1 7.3 4H17"/></svg>`;
   const praise = isAgent && m.agentId
-    ? `<div class="msg-actions"><button class="praise-btn" data-msg="${m.id}" data-agent="${m.agentId}">👍 도움이 됐어요${m.reactions ? " · " + m.reactions : ""}</button><button class="scold-btn" data-msg="${m.id}" title="아쉬운 답변 — 이 답에 쓰인 기억의 신뢰도를 낮춥니다">👎</button></div>`
+    ? `<div class="msg-actions"><button class="praise-btn" data-msg="${m.id}" data-agent="${m.agentId}">${ICON_UP} 도움이 됐어요${m.reactions ? " · " + m.reactions : ""}</button><button class="scold-btn" data-msg="${m.id}" title="아쉬운 답변 — 이 답에 쓰인 기억의 신뢰도를 낮춥니다" aria-label="아쉬운 답변">${ICON_DOWN}</button></div>`
     : "";
   // 호버 툴바: 복사(모든 메시지) + 삭제(내 메시지, 보낸 지 5분 이내)
   const ageMs = m.createdAt && m.createdAt.seconds ? Date.now() - m.createdAt.seconds * 1000 : 0;
   const canDel = mine && ageMs < 5 * 60 * 1000;
   // 🧠 승격: 이 메시지를 채널 에이전트들의 '팀 승격 기억'으로 (자동 학습과 병행되는 절충 모델)
+  const I_BRAIN = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4.5a3 3 0 0 0-3 3 3 3 0 0 0-1 5.8V16a3 3 0 0 0 4 2.8M9 4.5A2.5 2.5 0 0 1 12 6.5v11M9 4.5a2.5 2.5 0 0 1 3-.2M15 4.5a3 3 0 0 1 3 3 3 3 0 0 1 1 5.8V16a3 3 0 0 1-4 2.8"/></svg>`;
+  const I_COPY = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h8"/></svg>`;
+  const I_DEL = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/></svg>`;
+  const I_CHECK = `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-11"/></svg>`;
   const promote = m.content
     ? (m.promotedToMemory
-        ? `<button class="msg-tool promoted" title="이미 팀 기억으로 승격됨" disabled>🧠✓</button>`
-        : `<button class="msg-tool msg-promote" data-msg="${m.id}" title="팀 기억으로 승격 — 채널 에이전트들이 우선 기억합니다">🧠</button>`)
+        ? `<button class="msg-tool promoted" title="이미 팀 기억으로 승격됨" aria-label="승격됨" disabled>${I_BRAIN}${I_CHECK}</button>`
+        : `<button class="msg-tool msg-promote" data-msg="${m.id}" title="팀 기억으로 승격 — 채널 에이전트들이 우선 기억합니다" aria-label="팀 기억으로 승격">${I_BRAIN}</button>`)
     : "";
   const del = `<div class="msg-tools">` + promote +
-    (m.content ? `<button class="msg-tool msg-copy" data-msg="${m.id}" title="내용 복사">📋</button>` : "") +
-    (canDel ? `<button class="msg-tool msg-del" data-msg="${m.id}" title="내 메시지 삭제 (5분 이내만)">🗑</button>` : "") +
+    (m.content ? `<button class="msg-tool msg-copy" data-msg="${m.id}" title="내용 복사" aria-label="내용 복사">${I_COPY}</button>` : "") +
+    (canDel ? `<button class="msg-tool msg-del" data-msg="${m.id}" title="내 메시지 삭제 (5분 이내만)" aria-label="삭제">${I_DEL}</button>` : "") +
     `</div>`;
   const safeImg = safeImageSrc(m.image);
   const img = m.image

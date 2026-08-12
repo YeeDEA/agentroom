@@ -673,3 +673,78 @@ body { letter-spacing: -0.011em; }
 /* ── 광학 정렬 (미란다 2) — 아이콘 버튼 시각 보정 ── */
 .chan-hash { position: relative; top: -.5px; }
 .icon-btn svg { position: relative; top: .5px; }
+
+/* 워크스페이스 이니셜 아이콘 — 팔레트 기반 무채색(컬러 이모지 대체) */
+.ws-rail .ws-icon { background: var(--bg-4); color: var(--txt-dim); font-weight: 800; }
+.ws-rail .ws-icon:hover { background: var(--bg-3); color: var(--txt); }
+.ws-rail .ws-icon.is-active { background: var(--txt); color: var(--bg-2); box-shadow: none; }
+/* 채널 에이전트 수: 무채색 SVG + 숫자 */
+.chan-agentcount { margin-left: auto; display: inline-flex; align-items: center; gap: 3px;
+  font-size: 10.5px; color: var(--txt-mute); font-variant-numeric: tabular-nums; }
+
+/* ================================================================
+   V5 — 포스트잇 말풍선 · 워크스페이스 스와치 · SVG 액션버튼 · 버튼 모양
+   ================================================================ */
+
+/* ── 워크스페이스 스와치: 글자 없이 색+무늬 (팔레트 파생) ── */
+.ws-rail .ws-icon { background: color-mix(in srgb, var(--tint) 16%, var(--bg-2));
+  color: var(--tint); display: grid; place-items: center; }
+.ws-rail .ws-icon:hover { background: color-mix(in srgb, var(--tint) 26%, var(--bg-2)); }
+.ws-rail .ws-icon.is-active { background: var(--tint); color: #fff; box-shadow: none; }
+.ws-rail .ws-add { background: var(--bg-4); color: var(--txt-dim); }
+.ws-rail .ws-add:hover { background: var(--bg-3); color: var(--txt); }
+
+/* ── 포스트잇 말풍선 ── */
+/* 에이전트/타인 = 노란 포스트잇 (살짝 기울고 접힌 모서리, 종이 그림자) */
+.msg:not(.mine) .msg-body {
+  background: #fff9d6; border: 0; color: #2a2718;
+  border-radius: 2px; padding: 12px 15px 13px;
+  box-shadow: 1px 2px 0 rgba(0,0,0,.04), 2px 5px 12px rgba(40,36,20,.12);
+  transform: rotate(-.5deg); transition: transform var(--t-sys) var(--ez-out); }
+.msg:not(.mine) .msg-body:hover { transform: rotate(0deg) translateY(-1px); }
+.msg:not(.mine) .msg-body::after { /* 접힌 모서리 */
+  content: ""; position: absolute; right: 0; bottom: 0; width: 16px; height: 16px;
+  background: linear-gradient(135deg, transparent 50%, rgba(0,0,0,.06) 50%, #efe7ad 50%); }
+.msg:not(.mine) .msg-body { position: relative; overflow: hidden; }
+.msg:not(.mine) .msg-text, .msg:not(.mine) .msg-name { color: #2a2718; }
+.msg:not(.mine) .msg-time { color: #8a8258; }
+
+/* 내 포스트잇 = 팔레트 민트/연녹, 반대로 기울어 리듬 */
+.msg.mine .msg-body {
+  background: color-mix(in srgb, var(--accent) 14%, #ffffff);
+  border-radius: 2px; padding: 11px 15px 12px; box-shadow: 1px 2px 0 rgba(0,0,0,.04), 2px 5px 12px rgba(46,110,78,.14);
+  transform: rotate(.6deg); position: relative; overflow: hidden; transition: transform var(--t-sys) var(--ez-out); }
+.msg.mine .msg-body:hover { transform: rotate(0deg) translateY(-1px); }
+
+/* 승격 포스트잇: 초록 테이프 한 조각 */
+.msg.promoted-msg .msg-body { border-left: 0; }
+.msg.promoted-msg .msg-body::before {
+  content: ""; position: absolute; left: 50%; top: -7px; transform: translateX(-50%) rotate(-2deg);
+  width: 54px; height: 15px; background: color-mix(in srgb, var(--lime) 55%, transparent);
+  box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+
+/* 다크 모드 포스트잇 톤 다운 */
+:root[data-theme="dark"] .msg:not(.mine) .msg-body { background: #423d24; color: #ece6cf; }
+:root[data-theme="dark"] .msg:not(.mine) .msg-text,
+:root[data-theme="dark"] .msg:not(.mine) .msg-name { color: #ece6cf; }
+:root[data-theme="dark"] .msg.mine .msg-body { background: color-mix(in srgb, var(--accent) 22%, #1d1c15); }
+
+/* ── 액션 버튼: SVG 아이콘 정렬 + 알약 모양 ── */
+.praise-btn, .scold-btn { display: inline-flex; align-items: center; gap: 5px;
+  border: 1px solid var(--line); background: var(--bg-2); color: var(--txt-dim);
+  border-radius: 8px; padding: 5px 11px; font-size: 12px; cursor: pointer;
+  transition: border-color var(--t-click), color var(--t-click), transform var(--t-click); }
+.praise-btn svg, .scold-btn svg { display: block; }
+.praise-btn:hover { border-color: var(--c-verified); color: var(--c-verified); }
+.scold-btn { padding: 5px 9px; }
+.scold-btn:hover { border-color: var(--danger); color: var(--danger); }
+.praise-btn:active, .scold-btn:active { transform: scale(.94); }
+.msg-tool { display: inline-grid; place-items: center; }
+.msg-tool.promoted { color: var(--lime); }
+
+/* ── 버튼 모양 통일: 살짝 부드러운 사각, 눌림 피드백 ── */
+.btn { border-radius: 10px; transition: filter var(--t-click), transform var(--t-click); }
+.btn:active { transform: translateY(1px) scale(.99); }
+.btn-primary { box-shadow: 0 1px 2px rgba(46,110,78,.2); }
+.head-btn { transition: border-color var(--t-click), color var(--t-click), background var(--t-click); }
+.head-btn:active { transform: translateY(1px); }

@@ -637,7 +637,7 @@ function renderMessages() {
           <p class="empty-start-sub">사이드바의 <b>＋ 에이전트</b>를 누르면 이 채널에서 함께 일할 AI 팀원이 생깁니다.</p>
         </div>`;
   }
-  for (const m of state.messages) html += msgHtml(m);
+  for (let i = 0; i < state.messages.length; i++) html += msgHtml(state.messages[i], i === state.messages.length - 1 && !state.pending.length);
   for (const p of state.pending) html += thinkingHtml(p);
   box.innerHTML = html;
   const es = box.querySelector("#empty-suggest");
@@ -721,7 +721,7 @@ function docHtml(m) {
   return `<div class="summary-card doc-card"><h4>${esc(d.emoji || "📋")} ${esc(d.title || "")} <span class="sc-time">${fmtTime(m.createdAt)}</span></h4>${secs}</div>`;
 }
 
-function msgHtml(m) {
+function msgHtml(m, isLast = false) {
   if (m.senderType === "system" || m.kind === "summary") {
     if (m.kind === "diagram") return diagramHtml(m);
     if (m.kind === "scores") return scoresHtml(m);
@@ -764,11 +764,13 @@ function msgHtml(m) {
   const srcs = isAgent && Array.isArray(m.sources) && m.sources.length
     ? `<div class="msg-sources">🧠 근거: ${m.sources.map((s, i) => `<span class="src-link" data-kid="${esc((m.sourceKids || [])[i] || "")}" title="클릭하면 원본 지식·출처로 이동">${esc(s)}</span>`).join(" · ")}</div>`
     : (isAgent && m.agentId ? `<div class="msg-nosrc">일반 지식으로 답변 — 팀 기억 미사용</div>` : "");
+  const fups = isLast && isAgent && Array.isArray(m.followups) && m.followups.length
+    ? `<div class="followups">${m.followups.map((q) => `<button class="followup-chip" data-q="${esc(q)}">${esc(q)}</button>`).join("")}</div>` : "";
   const hib = isAgent && m.hibernated
     ? `<div class="msg-hibernate" data-n="${m.hibernated}">❄️ 잠든 기억 ${m.hibernated}개가 이 질문에 답할 수 있었어요 — <b>깨우기</b></div>` : "";
   return `<div class="msg${mine ? " mine" : ""}${m.promotedToMemory ? " promoted-msg" : ""}" data-msg-id="${m.id}">${ava}<div class="msg-body">
     <div class="msg-top"><span class="msg-name ${isAgent ? "agent" : ""}${mine ? " me" : ""}">${esc(dispName)}</span>${badge}<span class="msg-time">${fmtTime(m.createdAt)}</span>${m.promotedToMemory ? `<span class="promoted-chip">🧠 팀 기억</span>` : ""}</div>
-    ${m.content ? `<div class="msg-text">${highlightMentions(m.content)}</div>` : ""}${img}${srcs}${hib}${praise}</div>${del}</div>`;
+    ${m.content ? `<div class="msg-text">${highlightMentions(m.content)}</div>` : ""}${img}${srcs}${hib}${praise}${fups}</div>${del}</div>`;
 }
 
 function thinkingHtml(p) {
@@ -840,6 +842,15 @@ $("messages").addEventListener("click", async (e) => {
     }
     try { await store.deleteMessage(state.currentWsId, state.currentChId, delBtn.dataset.msg); toast("메시지를 삭제했어요."); }
     catch (err) { toast("삭제 실패: " + (err.message || err)); }
+    return;
+  }
+  // 후속 질문 칩 → 입력창 채움 (전송은 사용자 몫)
+  const fup = e.target.closest(".followup-chip");
+  if (fup) {
+    const agentName = fup.closest(".msg")?.querySelector(".msg-name")?.textContent || "";
+    const q = fup.dataset.q || "";
+    $("composer-input").value = q.startsWith("@") ? q : (agentName ? `@${agentName} ${q}` : q);
+    $("composer-input").focus();
     return;
   }
   // ❄️ 동면 배지 클릭 → 업그레이드 모달
@@ -1181,7 +1192,7 @@ async function runMetricsCard() {
         { heading: "읽는 법", items: ["precision@1은 LLM 자기보고 기반이라 실제보다 후하게 나옵니다. 절대값보다 주 단위 추세로 보세요."] },
       ],
     });
-  } catch (e) { toast("지표 집계 실패: " + (e.message || e)); }
+  } catch (e) { toast("지표 집계 실패: " + (e.message || e) + " — 새로고침 후 /metrics를 다시 입력하세요."); }
 }
 
 // 결정 타임라인 — 팀 기억의 본질은 "우리가 뭘 결정했나"
@@ -1266,7 +1277,7 @@ async function agentSpeak(agent, userText, awardAnswer = true) {
     const cites = (res.sources || []).map((n) => ({ t: String(memories[n - 1] || "").slice(0, 70), kid: retrieval.meta.ids[n - 1] || "" })).filter((c) => c.t);
     const ref = await store.sendMessage(wsId, chId, { senderId: agent.id, senderType: "agent", senderName: agent.name, content: res.reply, agentId: agent.id,
       sources: cites.map((c) => c.t), sourceKids: cites.map((c) => c.kid),
-      hibernated: retrieval.meta.hibernated || 0 });
+      hibernated: retrieval.meta.hibernated || 0, followups: res.followups || [] });
     recordAnswerMetric({ wsId, agent, ref, res, retrieval, t0 });
     if (res.ok && awardAnswer) await awardExp(agent.id, EXP.ANSWER, 0, 1);
   } catch (err) { console.error(err); }
@@ -1387,16 +1398,17 @@ async function triggerAgent(agent, userText) {
       senderId: agent.id, senderType: "agent", senderName: agent.name,
       content: res.reply, agentId: agent.id,
       sources: cites.map((c) => c.t), sourceKids: cites.map((c) => c.kid),
-      hibernated: retrieval.meta.hibernated || 0,
+      hibernated: retrieval.meta.hibernated || 0, followups: res.followups || [],
     });
     recordAnswerMetric({ wsId, agent, ref, res, retrieval, t0 });
     if (res.ok) {
       let learnedDelta = 0;
       if (res.learned) {
-        await store.addKnowledge(wsId, { content: res.learned, sourceChannelId: chId,
+        const kRef = await store.addKnowledge(wsId, { content: res.learned, sourceChannelId: chId,
           sourceAgentId: agent.id, sourceAgentName: agent.name, learnedFrom: meName() });
         learnedDelta = 1;
-        toast(`🧠 ${agent.name} 학습: ${String(res.learned).slice(0, 40)}${res.learned.length > 40 ? "…" : ""}`);
+        toastUndo(`🧠 ${agent.name} 학습: ${String(res.learned).slice(0, 40)}${res.learned.length > 40 ? "…" : ""}`,
+          () => store.deleteKnowledge(wsId, kRef.id), 6000);
       }
       await awardExp(agent.id, EXP.ANSWER + (res.learned ? EXP.LEARN : 0), learnedDelta, 1);
     }
@@ -1518,7 +1530,7 @@ function renderPetActions(a) {
     try {
       if (inChan) { await store.removeAgentFromChannel(state.currentWsId, state.currentChId, a.id); toast("채널에서 뺐어요."); }
       else { await store.addAgentToChannel(state.currentWsId, state.currentChId, a.id); toast("채널에 추가했어요."); }
-    } catch (e) { toast("실패: " + (e.message || e)); }
+    } catch (e) { toast("실패: " + (e.message || e) + " — 다시 시도해 주세요."); }
   };
   $("pa-del").onclick = async () => {
     if (!delArmed) { delArmed = true; $("pa-del").textContent = "정말 삭제? (한 번 더)"; return; }
@@ -1528,7 +1540,7 @@ function renderPetActions(a) {
       if (state.unsub.memories) { state.unsub.memories(); state.unsub.memories = null; }
       renderPanel();
       toast(`'${a.name}'을(를) 삭제했어요.`);
-    } catch (e) { toast("삭제 실패: " + (e.message || e)); }
+    } catch (e) { toast("삭제 실패: " + (e.message || e) + " — 네트워크 확인 후 다시 시도하세요."); }
   };
 }
 
@@ -1614,13 +1626,13 @@ function renderMemories() {
   }).join("");
   ul.querySelectorAll(".mem-up").forEach((b) => b.onclick = async () => {
     try { await store.promoteKnowledge(state.currentWsId, b.dataset.id, state.user.uid); toast("🧠 승격했어요 — 모든 에이전트가 우선 반영합니다."); }
-    catch (e) { toast("승격 실패: " + (e.message || e)); }
+    catch (e) { toast("승격 실패: " + (e.message || e) + " — 잠시 후 다시 눌러보세요."); }
   });
   ul.querySelectorAll(".mem-del").forEach((b) => b.onclick = async () => {
     try {
       await store.deleteKnowledge(state.currentWsId, b.dataset.id);
       toast("지식을 삭제했어요.");
-    } catch (e) { toast("삭제 실패: " + (e.message || e)); }
+    } catch (e) { toast("삭제 실패: " + (e.message || e) + " — 네트워크 확인 후 다시 시도하세요."); }
   });
 }
 
@@ -1797,14 +1809,14 @@ $("ws-invite-btn").onclick = async () => {
   $("modal").querySelectorAll(".mem-kick").forEach((b) => b.onclick = async () => {
     if (b.dataset.armed !== "1") { b.dataset.armed = "1"; b.textContent = "정말?"; setTimeout(() => { if (b.isConnected) { b.dataset.armed = ""; b.textContent = "내보내기"; } }, 2500); return; }
     try { await store.kickMember(state.currentWsId, b.dataset.uid); closeModal(); toast("멤버를 내보냈어요."); }
-    catch (e) { toast("실패: " + (e.message || e)); }
+    catch (e) { toast("실패: " + (e.message || e) + " — 다시 시도해 주세요."); }
   });
   // 본인 탈퇴 (2단계 확인)
   const leaveBtn = $("modal").querySelector(".mem-leave");
   if (leaveBtn) leaveBtn.onclick = async () => {
     if (leaveBtn.dataset.armed !== "1") { leaveBtn.dataset.armed = "1"; leaveBtn.textContent = "정말 나갈까요?"; setTimeout(() => { if (leaveBtn.isConnected) { leaveBtn.dataset.armed = ""; leaveBtn.textContent = "방 나가기"; } }, 2500); return; }
     try { await store.leaveWorkspace(state.currentWsId, myUid); closeModal(); toast("방에서 나왔어요."); }
-    catch (e) { toast("실패: " + (e.message || e)); }
+    catch (e) { toast("실패: " + (e.message || e) + " — 다시 시도해 주세요."); }
   };
 };
 

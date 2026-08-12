@@ -246,6 +246,7 @@ export async function sendMessage(wsId, chId, msg) {
     ...(msg.sources && msg.sources.length ? { sources: msg.sources.slice(0, 3) } : {}),
     ...(msg.sourceKids && msg.sourceKids.length ? { sourceKids: msg.sourceKids.slice(0, 3) } : {}),
     ...(msg.hibernated ? { hibernated: msg.hibernated } : {}),
+    ...(msg.followups && msg.followups.length ? { followups: msg.followups.slice(0, 2) } : {}),
     createdAt: serverTimestamp(),
   });
   // 안읽음 배지용 — 채널의 마지막 활동 시각 (실패해도 메시지 전송엔 영향 없음)

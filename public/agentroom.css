@@ -288,6 +288,14 @@ button { font-family: inherit; }
 .suggest-row { cursor: pointer; }
 .suggest-row:hover { background: var(--bg-4); }
 
+/* 후속 질문 칩 — 답변 직후 다음 행동 제안 (Perplexity 패턴) */
+.followups { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.followup-chip { background: var(--bg-2); border: 1px solid var(--line); color: var(--txt-dim);
+  border-radius: 999px; padding: 6px 12px; font-size: 12px; cursor: pointer; text-align: left;
+  transition: border-color .12s, color .12s; }
+.followup-chip::before { content: "↳ "; color: var(--accent); font-weight: 700; }
+.followup-chip:hover { border-color: var(--accent); color: var(--txt); }
+
 /* 실행취소 토스트 */
 .toast-undo { margin-left: 10px; background: var(--bg-4); border: 1px solid var(--line); color: var(--accent-2);
   border-radius: 8px; padding: 3px 10px; font-size: 12px; font-weight: 700; cursor: pointer; }
@@ -329,9 +337,12 @@ button { font-family: inherit; }
 .msg-img { display: block; max-width: 320px; max-height: 260px; border-radius: 10px;
   border: 1px solid var(--line); margin-top: 6px; }
 /* 🧠 근거 각주 — 에이전트가 활용한 팀 학습 지식 */
-.msg-sources { margin-top: 5px; font-size: 11px; color: var(--txt-mute); line-height: 1.5; }
-.msg-sources span { background: rgba(139,124,246,.10); border: 1px solid var(--line);
-  border-radius: 6px; padding: 1px 6px; color: var(--txt-dim); }
+.msg-sources { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin-top: 7px; font-size: 11px; }
+.msg-sources::before { content: "🧠 근거"; color: var(--txt-mute); font-weight: 700; margin-right: 2px; }
+.msg-sources span { background: var(--bg-2); border: 1px solid var(--line); color: var(--txt-dim);
+  border-radius: 999px; padding: 3px 10px; max-width: 260px; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; box-shadow: var(--shadow); }
+.msg-sources span:hover { border-color: var(--accent); color: var(--accent-2); }
 /* 첨부 버튼 */
 .attach-btn { align-self: flex-end; background: var(--bg-3); border: 1px solid var(--line); color: var(--txt-dim);
   border-radius: 10px; padding: 10px 12px; font-size: 16px; cursor: pointer; line-height: 1.2; }

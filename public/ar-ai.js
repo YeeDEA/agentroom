@@ -190,9 +190,10 @@ ${userText}
 - 위 "학습한 지식"과 관련 있으면 적극 활용하라(팀의 집단지성을 반영).
 - 이번 대화에서 앞으로 계속 기억할 가치가 있는 사실/결정/선호/맥락을 하나 배웠다면 "learned"에 한국어 한 줄로 요약하라. 인사·잡담처럼 기억할 가치가 없으면 learned는 null로 둬라(아무거나 지어내지 마라).
 - 답변에 위 "학습한 지식"을 실제로 활용했다면 그 번호들을 "sources"에 담아라(활용 안 했으면 빈 배열, 최대 3개).
+- 이 답을 들은 팀원이 자연스럽게 이어서 물을 만한 후속 질문을 "followups"에 최대 2개 담아라(한국어, 네게 바로 보낼 수 있는 형태. 뻔한 질문 말고 대화를 진전시키는 것).
 
 반드시 아래 STRICT JSON만 출력하라(코드펜스·설명 금지):
-{"reply": "채널에 올릴 답변(한국어)", "learned": "기억할 지식 한 줄(한국어) 또는 null", "sources": [활용한 지식 번호]}`;
+{"reply": "채널에 올릴 답변(한국어)", "learned": "기억할 지식 한 줄(한국어) 또는 null", "sources": [활용한 지식 번호], "followups": ["후속 질문", "후속 질문"]}`;
 }
 
 const UNAVAILABLE_MSG =
@@ -233,7 +234,10 @@ export async function respond({ agent, memories, recent, userName, userText, lev
   const sources = Array.isArray(parsed.sources)
     ? parsed.sources.map(Number).filter((n) => Number.isInteger(n) && n >= 1 && n <= memories.length).slice(0, 3)
     : [];
-  return { reply: parsed.reply.trim(), learned, sources, ok: true };
+  const followups = Array.isArray(parsed.followups)
+    ? parsed.followups.filter((f) => typeof f === "string" && f.trim()).map((f) => f.trim().slice(0, 120)).slice(0, 2)
+    : [];
+  return { reply: parsed.reply.trim(), learned, sources, followups, ok: true };
 }
 
 export function aiAvailable() {

@@ -605,3 +605,71 @@ body { letter-spacing: -0.011em; }
 
 /* 라이트에서 카드 그림자 더 은은하게(플랫 아님) */
 :root { --shadow: 0 1px 2px rgba(33,31,26,.05), 0 4px 12px rgba(33,31,26,.04); }
+
+/* ================================================================
+   V4 — 거장 패널 종합 (docs/10). 색이 아니라 골격·위계·리듬.
+   3단 디스코드 골격 → 2단(레일을 사이드바 위 가로 스트립으로).
+   되돌리려면 이 블록 삭제.
+   ================================================================ */
+
+/* ── 토큰: 스페이싱 스케일(4의 배수) · 타입 · 이징 (미란다 3·5) ── */
+:root {
+  --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-5: 24px; --sp-6: 32px;
+  --ez-out: cubic-bezier(.16,.84,.44,1);   /* 등장: 빠르게 나타나 부드럽게 멈춤 */
+  --ez-in: cubic-bezier(.5,0,.9,.3);        /* 퇴장: 가속 */
+  --t-click: 120ms;  --t-sys: 240ms;         /* 클릭=단호 / 시스템=여유 */
+  /* 색의 의미 분리 (미란다 4) */
+  --c-agent: var(--accent);      /* AI가 말할 때 */
+  --c-human: var(--me);          /* 사람이 말할 때 */
+  --c-verified: #2e8b57;         /* 근거 검증됨 */
+}
+:root[data-theme="dark"] { --c-verified: #63b487; }
+
+/* ── 3단 → 2단: 레일을 사이드바 위 가로 스트립으로 (Telegram 결) ── */
+.app-view { grid-template-columns: 272px 1fr; grid-template-rows: 52px 1fr;
+  grid-template-areas: "rail chat" "side chat"; }
+.ws-rail { grid-area: rail; flex-direction: row; align-items: center; gap: var(--sp-2);
+  padding: 0 var(--sp-3); overflow-x: auto; overflow-y: hidden; border-bottom: 1px solid var(--line);
+  background: var(--bg-2); }
+.ws-rail .ws-icon { width: 32px; height: 32px; border-radius: 9px; font-size: 14px; flex: 0 0 auto; }
+.ws-rail .ws-icon.is-active::before { display: none; }
+.ws-rail .ws-icon.is-active { box-shadow: 0 0 0 2px var(--accent); }
+.sidebar { grid-area: side; border-right: 1px solid var(--line); }
+.chat { grid-area: chat; }
+
+/* ── 배경 미세 온기 (고흐) — 한 귀퉁이에만, 여백 60%+ 유지 ── */
+.chat { background:
+  radial-gradient(680px 400px at 92% -8%, color-mix(in srgb, var(--accent) 5%, transparent), transparent 70%),
+  var(--bg); }
+
+/* ── 타이포 위계 (미란다 1) — 본문/근거/메타를 다른 층위로 ── */
+.msg-text { font-size: 15px; line-height: 1.62; }
+.msg-name { font-size: 13.5px; font-weight: 800; letter-spacing: -.01em; }
+.msg-time { font-size: 11px; letter-spacing: .02em; color: var(--txt-mute); font-variant-numeric: tabular-nums; }
+
+/* 근거 각주 = 제품의 심장 → 검증색·전용 스타일 (미란다 1·4) */
+.msg-sources { gap: var(--sp-2); margin-top: var(--sp-3); }
+.msg-sources::before { content: "근거"; font-size: 10px; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--c-verified); font-weight: 800; align-self: center; }
+.msg-sources span { font-size: 12.5px; border-color: color-mix(in srgb, var(--c-verified) 30%, var(--line));
+  color: var(--txt-dim); }
+.msg-sources span:hover { border-color: var(--c-verified); color: var(--c-verified); }
+
+/* ── 여백 리듬 (고흐·미란다 3) — 질문/답변/근거 간격을 다르게 ── */
+.messages > .msg { margin-top: var(--sp-5); }
+.messages > .msg.mine { margin-top: var(--sp-4); }
+.msg-body > * + * { margin-top: var(--sp-2); }
+
+/* ── 에이전트 4초 호흡 (고흐) — 유일하게 허용된 무한 반복 ── */
+@keyframes breathe { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
+.msg:not(.mine) .msg-ava { animation: breathe 4s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .msg:not(.mine) .msg-ava { animation: none; } }
+
+/* ── 모션 이징 재정의 (미란다 5) — all 금지, 등장은 ease-out ── */
+.msg { animation: msg-in var(--t-sys) var(--ez-out) both; }
+.chan-item { transition: background var(--t-click), box-shadow var(--t-click), padding-left var(--t-click); }
+#composer-send { transition: transform var(--t-click), filter var(--t-click); }
+
+/* ── 광학 정렬 (미란다 2) — 아이콘 버튼 시각 보정 ── */
+.chan-hash { position: relative; top: -.5px; }
+.icon-btn svg { position: relative; top: .5px; }

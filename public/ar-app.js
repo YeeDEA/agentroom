@@ -561,16 +561,40 @@ function openUpgradeModal(trigger, detail = {}) {
     <p class="pro-price">팀당 <b>월 4,900원</b> — 커피 한 잔 값으로 팀의 1년을 기억합니다</p>
     <div class="modal-actions">
       <button class="btn" id="up-close">나중에</button>
-      <button class="btn btn-primary" id="up-notify">출시 알림 받기 — 50% 할인</button>
+      <button class="btn btn-primary" id="up-notify">출시 알림 받기 — 얼리버드 우대</button>
     </div>
     <p class="sub" style="text-align:center;margin-top:8px;font-size:11px">무료로 계속 써도 쌓인 지식은 사라지지 않아요.</p>`);
   $("up-close").onclick = closeModal;
+  // 3단 의향 사다리 (원탁 Q3): 클릭 → 팀·용도 → '출시 시 결제' 체크+결재권자 실명
+  // 각 단계를 upgrade_intent(step)로 계측 — 신호 강도가 다르다
   $("up-notify").onclick = async () => {
-    try {
-      await store.logAnswerMetric(state.currentWsId, { type: "upgrade_intent", trigger, ...detail });
-    } catch (_) {}
-    closeModal();
-    toast("🎉 등록됐어요! 출시하면 50% 할인 코드를 보내드릴게요.");
+    try { await store.logAnswerMetric(state.currentWsId, { type: "upgrade_intent", step: 1, trigger, ...detail }); } catch (_) {}
+    const box = $("modal");
+    box.querySelector(".modal-actions").outerHTML = `
+      <div class="ladder-step">
+        <p class="sub" style="margin:10px 0 6px">알림 등록됐어요! 어떤 팀에서 쓰실 예정인지 알려주시면 출시 우선순위에 반영할게요. <b>지금은 아무 금액도 청구되지 않습니다.</b></p>
+        <input id="up-team" placeholder="팀 이름·용도 (예: ○○동아리 인수인계)" style="width:100%;background:var(--bg);border:1px solid var(--line);color:var(--txt);border-radius:10px;padding:9px 12px;font-size:13px" />
+        <label style="display:flex;gap:8px;align-items:flex-start;margin:10px 0 6px;font-size:12.5px;color:var(--txt-dim)">
+          <input type="checkbox" id="up-commit" style="margin-top:2px" />
+          출시되면 결제할 의사가 있어요 (연 49,000원 · 언제든 위약 없이 해지)
+        </label>
+        <input id="up-approver" placeholder="결제 결정권자 이름·이메일 (예: 총무 김OO / kim@...)" hidden
+          style="width:100%;background:var(--bg);border:1px solid var(--line);color:var(--txt);border-radius:10px;padding:9px 12px;font-size:13px" />
+        <div class="modal-actions"><button class="btn" id="up-skip">여기까지만</button><button class="btn btn-primary" id="up-send">보내기</button></div>
+      </div>`;
+    $("up-commit").onchange = () => { $("up-approver").hidden = !$("up-commit").checked; };
+    $("up-skip").onclick = closeModal;
+    $("up-send").onclick = async () => {
+      const team = $("up-team").value.trim(), commit = $("up-commit").checked, approver = $("up-approver").value.trim();
+      try {
+        await store.logAnswerMetric(state.currentWsId, {
+          type: "upgrade_intent", step: commit && approver ? 3 : 2, trigger,
+          team: team.slice(0, 80), commitToPay: commit, approver: approver.slice(0, 120), ...detail,
+        });
+      } catch (_) {}
+      closeModal();
+      toast(commit ? "🙏 감사합니다 — 출시 소식을 가장 먼저 알려드릴게요." : "등록됐어요! 출시하면 알려드릴게요.");
+    };
   };
 }
 function channelAgents() {
@@ -1196,6 +1220,11 @@ async function openImportModal() {
     <p class="sub">카카오톡 채팅방 → 설정 → <b>대화 내용 내보내기(.txt)</b> 파일을 올리거나 내용을 붙여넣으세요.
     과거 대화에서 <b>결정·일정·역할·규칙만 선별</b>해 팀 지식으로 등록합니다(잡담 제외, 개인정보 자동 마스킹).</p>
     <input type="file" id="imp-file" accept=".txt" style="margin-bottom:8px" />
+    ${!wsIsPro() ? `<label class="sub" style="display:block;margin:0 0 6px">무료 플랜 상속 구간 (500메시지):
+      <select id="imp-range" style="margin-left:6px;background:var(--bg);border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:4px 8px">
+        <option value="old" selected>처음(가장 오래된) 500 — 인수인계 추천</option>
+        <option value="new">최신 500</option>
+      </select></label>` : ""}
     <textarea id="imp-text" rows="7" placeholder="또는 여기에 카톡 내보내기 내용을 붙여넣기…" style="width:100%;background:var(--bg);border:1px solid var(--line);color:var(--txt);border-radius:10px;padding:10px;font-size:12px;font-family:inherit"></textarea>
     <p class="sub" id="imp-status" style="margin:8px 0 0"></p>
     <div class="modal-actions">
@@ -1212,11 +1241,17 @@ async function openImportModal() {
     let msgs = parseKakaoExport(raw);
     const status = $("imp-status");
     if (!msgs.length) { status.textContent = "⚠️ 카톡 내보내기 형식을 인식하지 못했어요. PC/모바일 내보내기 txt인지 확인해 주세요."; return; }
-    // 무료 게이트: 최근 500메시지까지만 (오래된 것부터가 아니라 최신 쪽을 남긴다)
-    let gated = 0;
+    // 무료 게이트: 구간 선택 500 (원탁 Q4 — 인수인계 맥락에선 '최근 500'=방학 잡담이라 실패)
+    let gated = 0, totalParsed = msgs.length, lockedDecisions = 0;
     if (!wsIsPro() && msgs.length > FREE_BACKFILL_LIMIT) {
       gated = msgs.length - FREE_BACKFILL_LIMIT;
-      msgs = msgs.slice(-FREE_BACKFILL_LIMIT);
+      const range = $("imp-range")?.value || "old";
+      const kept = range === "new" ? msgs.slice(-FREE_BACKFILL_LIMIT) : msgs.slice(0, FREE_BACKFILL_LIMIT);
+      // 잠긴 구간의 '결정 후보' 추정 — 잘림 카운터가 upgrade_intent 엔진 (원탁 결론)
+      const locked = range === "new" ? msgs.slice(0, gated) : msgs.slice(FREE_BACKFILL_LIMIT);
+      const DEC = /(결정|확정|하기로|까지|공지|규칙|담당|마감|회비|예산)/;
+      lockedDecisions = locked.filter((m) => DEC.test(m.text)).length;
+      msgs = kept;
     }
     $("imp-run").disabled = true;
     // 30개씩 묶어 LLM 선별 추출 — 쿼터 보호를 위해 최대 12청크(직렬 큐가 페이싱)
@@ -1242,7 +1277,7 @@ async function openImportModal() {
       sections: [
         { heading: "결과", items: [
           `메시지 ${msgs.length}건 분석 → 지식 ${saved}개 등록`,
-          ...(gated > 0 ? [`무료 플랜은 최근 500메시지까지 — 그 이전 ${gated}건은 Pro에서 깨울 수 있어요`] : []),
+          ...(gated > 0 ? [`전체 ${totalParsed.toLocaleString()}건 중 500건 상속 — 잠긴 구간 ${gated.toLocaleString()}건에서 결정 후보 ${lockedDecisions}건 발견 (Pro에서 전부 깨울 수 있어요)`] : []),
           ...(skipped > 0 ? [`쿼터 보호를 위해 ${skipped}건은 이번에 건너뛰었어요 (다시 /import로 이어서 가능)`] : []),
         ] },
         { heading: "다음", items: ["이제 에이전트에게 과거 일을 물어보세요 — 🧠 근거와 함께 답합니다. 📚 팀 위키에서도 확인할 수 있어요."] },
@@ -1250,7 +1285,7 @@ async function openImportModal() {
     });
     closeModal();
     toast(`📥 백필 완료 — 지식 ${saved}개 등록`);
-    if (gated > 0) openUpgradeModal("backfill-limit", { gatedMessages: gated });
+    if (gated > 0) openUpgradeModal("backfill-limit", { gatedMessages: gated, lockedDecisions });
   };
 }
 
@@ -1341,6 +1376,8 @@ function recordAnswerMetric({ wsId, agent, ref, res, retrieval, t0 }) {
     retrievalMiss: retrieval.meta.miss, retrievalMode: retrieval.meta.mode,
     poolSize: retrieval.meta.poolSize,
     citedIds: cited.map((n) => retrieval.meta.ids[n - 1]),
+    // 동면 90일 재판정용 섀도 지표: 실제 인용된 지식의 나이(일) — 원탁 Q4 결정
+    citedAges: cited.map((n) => (retrieval.meta.ages || [])[n - 1]).filter((v) => v != null),
     citedTop1: cited.includes(1),
     ok: !!res.ok,
   });

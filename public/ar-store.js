@@ -627,6 +627,7 @@ export async function fetchTopMemories(wsId, agentId, k = 6, queryText = "", opt
     meta: {
       ids: pick.map((s) => s.m.id),
       scores: pick.map((s) => Math.round(s.rel * 1000) / 1000),
+      ages: pick.map((s) => s.m.createdAt?.seconds ? Math.round((now - s.m.createdAt.seconds * 1000) / 86400000) : null),
       topScore: pick.length ? pick[0].rel : 0,
       miss: pick.length === 0,          // 회수 실패 — 계측 대상
       hibernated: hibernatedHits,       // ❄️ 동면 중인데 이 질문에 답할 수 있었던 지식 수

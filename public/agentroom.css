@@ -789,3 +789,33 @@ body { letter-spacing: -0.011em; }
 .wiki-pulse { animation: wiki-pop .5s var(--ez-out); }
 @keyframes wiki-pop { 0%,100% { transform: scale(1); } 40% { transform: scale(1.35); color: var(--accent); } }
 @media (prefers-reduced-motion: reduce) { .fly-chip { display: none; } }
+
+/* ================================================================
+   V9 — 로그인 화면을 인앱 컨셉으로 (종이·포스트잇·인덱스 카드)
+   ================================================================ */
+.auth-view { background:
+  radial-gradient(720px 420px at 88% -6%, color-mix(in srgb, var(--accent) 6%, transparent), transparent 70%),
+  var(--bg); }
+/* 히어로 포인트 = 포스트잇 3장 (메시지와 같은 문법) */
+.hp { background: #fff9d6; border: 0; color: #2a2718; border-radius: 2px;
+  box-shadow: 1px 2px 0 rgba(0,0,0,.04), 2px 5px 12px rgba(40,36,20,.12);
+  position: relative; overflow: hidden; padding: 12px 15px; }
+.hp b { color: #2a2718; } .hp span { color: #6d6748; }
+.hp::after { content: ""; position: absolute; right: 0; bottom: 0; width: 14px; height: 14px;
+  background: linear-gradient(135deg, transparent 50%, rgba(0,0,0,.06) 50%, #efe7ad 50%); }
+.hp:nth-child(1) { transform: rotate(-.6deg); }
+.hp:nth-child(2) { transform: rotate(.5deg); background: color-mix(in srgb, var(--accent) 12%, #ffffff); }
+.hp:nth-child(2) b, .hp:nth-child(2) span { color: var(--txt); }
+.hp:nth-child(2)::after { background: linear-gradient(135deg, transparent 50%, rgba(0,0,0,.05) 50%, color-mix(in srgb, var(--accent) 20%, #fff) 50%); }
+.hp:nth-child(3) { transform: rotate(-.4deg); }
+.hp { transition: transform var(--t-sys) var(--ez-out); }
+.hp:hover { transform: rotate(0deg) translateY(-2px); }
+/* 로그인 카드 = 인덱스 카드 (왼쪽 진초록 탭) */
+.auth-card { border-left: 4px solid var(--accent); border-radius: 3px 16px 16px 3px;
+  box-shadow: 1px 2px 0 rgba(0,0,0,.03), 2px 8px 24px rgba(40,36,20,.10); }
+.auth-tab.is-active { background: var(--accent); color: #fff; }
+.hero-h1 .lime, .auth-brand .lime { color: var(--accent); }
+/* 다크 톤 */
+:root[data-theme="dark"] .hp { background: #423d24; color: #ece6cf; }
+:root[data-theme="dark"] .hp b { color: #ece6cf; } :root[data-theme="dark"] .hp span { color: #b3ac8d; }
+:root[data-theme="dark"] .hp:nth-child(2) { background: color-mix(in srgb, var(--accent) 20%, #1d1c15); }

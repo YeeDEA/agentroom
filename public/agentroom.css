@@ -819,3 +819,17 @@ body { letter-spacing: -0.011em; }
 :root[data-theme="dark"] .hp { background: #423d24; color: #ece6cf; }
 :root[data-theme="dark"] .hp b { color: #ece6cf; } :root[data-theme="dark"] .hp span { color: #b3ac8d; }
 :root[data-theme="dark"] .hp:nth-child(2) { background: color-mix(in srgb, var(--accent) 20%, #1d1c15); }
+
+/* 라벨 있는 아이콘 버튼 — 직관성 (보이는 라벨 > 툴팁) */
+.icon-btn.labeled { width: auto; padding: 4px 9px; display: inline-flex; align-items: center; gap: 5px;
+  border: 1px solid var(--line); border-radius: 8px; font-size: 11.5px; font-weight: 700; }
+.icon-btn.labeled .ibl { order: 2; }
+.icon-btn.labeled svg { order: 1; top: 0; }
+.icon-btn.labeled:hover { border-color: var(--accent); color: var(--accent); background: transparent; }
+
+/* 팀 이름 변경 (팀 설정 모달) */
+.ws-rename { display: flex; gap: 8px; margin: 4px 0 14px; }
+.ws-rename input { flex: 1; background: var(--bg); border: 1px solid var(--line); color: var(--txt);
+  border-radius: 10px; padding: 9px 12px; font-size: 14px; font-weight: 700; }
+.ws-rename input:focus { outline: none; border-color: var(--accent); }
+.ws-rename .btn { white-space: nowrap; padding: 9px 14px; font-size: 13px; }

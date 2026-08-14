@@ -134,6 +134,11 @@ export function isPro(ws) {
   const until = ws.proUntil?.seconds ? ws.proUntil.seconds * 1000 : 0;
   return until > Date.now(); // 체험(trial)도 여기로 — 만료되면 자동 재잠금
 }
+// 팀 이름 변경 (규칙: 멤버는 name 키 수정 가능)
+export async function renameWorkspace(wsId, name) {
+  await updateDoc(doc(db, "workspaces", wsId), { name: String(name).slice(0, 80) });
+}
+
 export async function markBackfillUsed(wsId) {
   try { await updateDoc(doc(db, "workspaces", wsId), { backfillUsed: true }); } catch (_) {}
 }

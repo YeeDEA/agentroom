@@ -163,30 +163,24 @@ $("me-chip").onclick = openProfileModal;
 // ---------- ✨ 질문 추천 (온보딩: "뭘 물어봐야 할지 모르겠어요") ----------
 $("suggest-btn").onclick = async () => {
   if (!state.currentWsId || !state.currentChId) { toast("먼저 채널을 선택하세요."); return; }
-  const btn = $("suggest-btn");
-  btn.disabled = true; btn.textContent = "⏳";
   const agents = channelAgents();
   const firstAgent = agents[0]?.name || "가이드봇";
-  let list = [];
-  // 방금 답변에 후속 질문이 실려 있으면 그것부터 — LLM 호출 없이 즉시, 맥락도 정확
+  let list = [], instant = true;
+  // 1순위: 방금 답변의 후속 질문 (즉시·맥락 정확)
   const lastAgentMsg = [...state.messages].reverse().find((m) => m.senderType === "agent" && Array.isArray(m.followups) && m.followups.length);
   if (lastAgentMsg) {
     const who = lastAgentMsg.senderName || firstAgent;
     list = lastAgentMsg.followups.map((q) => (q.startsWith("@") ? q : `@${who} ${q}`));
   }
-  if (!list.length) try {
-    const retrieval = await store.fetchTopMemories(state.currentWsId, null, 8, "", { pro: true });
-    list = await ai.suggestQuestions({ knowledge: retrieval.texts, agentNames: agents.map((a) => a.name) });
-  } catch (_) {}
-  // LLM 실패(쿼터 등) 시에도 온보딩은 끊기지 않게 — 정적 추천으로 폴백
+  // 2순위: 정적 추천을 '즉시' 보여주고, LLM은 백그라운드로 — 기다리게 하지 않는다
   if (!list.length) {
+    instant = false;
     list = [
       `@${firstAgent} 지금까지 우리 팀이 확정한 것들을 한눈에 정리해줘`,
       `@${firstAgent} 이번 주에 우리가 놓치고 있는 게 뭘까?`,
       `/discuss 다음 마일스톤에서 가장 먼저 할 일`,
     ];
   }
-  btn.disabled = false; btn.textContent = "✨";
   const pal = $("cmd-palette");
   pal.innerHTML = `<div class="cmd-row" style="opacity:.6">✨ 이런 걸 물어보세요 (클릭하면 입력창에 들어가요)</div>` +
     list.map((q) => `<div class="cmd-row suggest-row" data-q="${esc(q)}"><span>${esc(q)}</span></div>`).join("");
@@ -196,8 +190,22 @@ $("suggest-btn").onclick = async () => {
     pal.hidden = true;
     $("composer-input").focus();
   });
-  const dismiss = (e) => { if (!pal.contains(e.target) && e.target !== btn) { pal.hidden = true; document.removeEventListener("click", dismiss); } };
+  const dismiss = (e) => { if (!pal.contains(e.target) && e.target !== $("suggest-btn")) { pal.hidden = true; document.removeEventListener("click", dismiss); } };
   setTimeout(() => document.addEventListener("click", dismiss), 0);
+  // 백그라운드 업그레이드: LLM이 더 나은 추천을 만들면, 팔레트가 아직 열려 있을 때만 교체
+  if (!instant) (async () => {
+    try {
+      const retrieval = await store.fetchTopMemories(state.currentWsId, null, 8, "", { pro: true });
+      const better = await ai.suggestQuestions({ knowledge: retrieval.texts, agentNames: agents.map((x) => x.name) });
+      if (better.length && !pal.hidden) {
+        pal.innerHTML = `<div class="cmd-row" style="opacity:.6">✨ 팀 지식 기반 추천</div>` +
+          better.map((q) => `<div class="cmd-row suggest-row" data-q="${esc(q)}"><span>${esc(q)}</span></div>`).join("");
+        pal.querySelectorAll(".suggest-row").forEach((r) => r.onclick = () => {
+          $("composer-input").value = r.dataset.q; pal.hidden = true; $("composer-input").focus();
+        });
+      }
+    } catch (_) {}
+  })();
 };
 
 // ---------- ☀️/🌙 테마 (라이트 기본 · 업무용) ----------
@@ -206,7 +214,9 @@ function applyTheme(t) {
   if (t === "dark") document.documentElement.dataset.theme = "dark";
   else delete document.documentElement.dataset.theme;
   const b = $("theme-btn");
-  if (b) { b.textContent = t === "dark" ? "☀️" : "🌙"; b.title = t === "dark" ? "라이트로 전환" : "다크로 전환"; }
+  const I_SUN = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M19.1 4.9l-1.8 1.8M6.7 17.3l-1.8 1.8"/></svg>`;
+  const I_MOON = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13.5A8 8 0 1 1 10.5 4a6.3 6.3 0 0 0 9.5 9.5z"/></svg>`;
+  if (b) { b.innerHTML = t === "dark" ? I_SUN : I_MOON; b.title = t === "dark" ? "라이트로 전환" : "다크로 전환"; }
   try { localStorage.setItem(THEME_KEY, t); } catch (_) {}
   // 픽셀 펫은 캔버스라 테마가 바뀌면 다시 그려야 한다
   renderAgents(); renderChatAgents(); renderMessages();
@@ -215,7 +225,7 @@ function applyTheme(t) {
 function currentTheme() { return document.documentElement.dataset.theme === "dark" ? "dark" : "light"; }
 $("theme-btn").onclick = () => applyTheme(currentTheme() === "dark" ? "light" : "dark");
 (() => { let t = "light"; try { t = localStorage.getItem(THEME_KEY) || "light"; } catch (_) {}
-  const b = $("theme-btn"); if (b) { b.textContent = t === "dark" ? "☀️" : "🌙"; } })();
+  if (t === "dark") applyTheme("dark"); })();
 
 // ---------- 에이전트 상태 다이얼로그 닫기 ----------
 function closeAgentDialog() {
@@ -1912,7 +1922,9 @@ $("ws-invite-btn").onclick = async () => {
   }).join("");
 
   openModal(`
-    <h3>멤버 초대 · 관리</h3>
+    <h3>팀 설정 · 초대</h3>
+    <div class="ws-rename"><input id="ws-rename-input" maxlength="80" value="${esc(ws?.name || "")}" />
+      <button class="btn" id="ws-rename-save">이름 변경</button></div>
     <p class="sub"><b>6자리 코드</b>와 <b>4자리 비밀번호</b>를 팀원에게 알려주세요. '워크스페이스 ＋ → 참여'에 입력하면 들어옵니다.</p>
     <div class="invite-code" id="invite-code">${esc(code || "------")}</div>
     <div class="invite-pin">🔒 비밀번호 <b>${esc(pin || "----")}</b></div>
@@ -1923,6 +1935,17 @@ $("ws-invite-btn").onclick = async () => {
       <button class="btn btn-primary" id="inv-close">닫기</button>
     </div>`);
   $("inv-close").onclick = closeModal;
+  $("ws-rename-save").onclick = async () => {
+    const nm = $("ws-rename-input").value.trim();
+    if (!nm) { toast("팀 이름을 입력하세요."); return; }
+    // 주의: ws는 모달 오픈 시점 스냅샷 — 현재 표시명과 비교해야 연속 변경이 된다
+    if (nm === $("ws-name").textContent) { toast("이미 같은 이름이에요."); return; }
+    try {
+      await store.renameWorkspace(state.currentWsId, nm);
+      toast("팀 이름을 바꿨어요."); // 레일·헤더는 실시간 구독이 자동 갱신
+      $("ws-name").textContent = nm;
+    } catch (e) { toast("이름 변경 실패: " + (e.message || e) + " — 잠시 후 다시 시도하세요."); }
+  };
   $("inv-copy").onclick = async () => {
     try { await navigator.clipboard.writeText(`AgentRoom 초대 — 코드: ${code} / 비밀번호: ${pin}`); } catch (_) {}
     $("inv-copy").textContent = "복사됨!";

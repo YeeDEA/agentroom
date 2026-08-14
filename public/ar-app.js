@@ -517,8 +517,8 @@ function updateChannelControls() {
   const has = !!state.currentChId;
   $("summarize-btn").hidden = !has;
   $("export-btn").hidden = !has;
-  $("auto-toggle-wrap").hidden = !has;
-  if (has) $("auto-toggle").checked = !!(currentChannel() && currentChannel().autoIntervene);
+  $("auto-toggle").hidden = !has;
+  if (has) $("auto-toggle").classList.toggle("on", !!(currentChannel() && currentChannel().autoIntervene));
 }
 
 function selectChannel(chId) {
@@ -2089,13 +2089,45 @@ function openExportModal() {
 }
 $("export-btn").addEventListener("click", openExportModal);
 
-// 자율개입 토글
-$("auto-toggle").addEventListener("change", async (e) => {
+// 자율개입 토글 — 체크박스 대신 버튼 색으로 상태 표시
+$("auto-toggle").addEventListener("click", async () => {
   if (!state.currentChId) return;
+  const next = !(currentChannel() && currentChannel().autoIntervene);
+  $("auto-toggle").classList.toggle("on", next); // 낙관적 반영
   try {
-    await store.setChannelAuto(state.currentWsId, state.currentChId, e.target.checked);
-    toast(e.target.checked ? "자율개입 ON — 질문(?)에 대표 에이전트가 스스로 답해요." : "자율개입 OFF — @멘션할 때만 답합니다.");
-  } catch (err) { toast("설정 실패"); e.target.checked = !e.target.checked; }
+    await store.setChannelAuto(state.currentWsId, state.currentChId, next);
+    toast(next ? "자율개입 ON — 질문(?)에 대표 에이전트가 스스로 답해요." : "자율개입 OFF — @멘션할 때만 답합니다.");
+  } catch (err) { $("auto-toggle").classList.toggle("on", !next); toast("설정 실패 — 다시 눌러보세요."); }
+});
+
+// 채널명 클릭 → 채널 설정 (이름 변경 · 삭제)
+$("chat-title").addEventListener("click", () => {
+  const ch = currentChannel();
+  if (!ch) return;
+  const isOwner = currentWs()?.ownerId === state.user.uid;
+  openModal(`
+    <h3>채널 설정</h3>
+    <div class="ws-rename"><input id="ch-rename-input" maxlength="60" value="${esc(ch.name)}" />
+      <button class="btn" id="ch-rename-save">이름 변경</button></div>
+    ${isOwner ? `<p class="sub">채널 삭제는 되돌릴 수 없어요 — 대화·카드가 목록에서 사라집니다. (팀 지식은 위키에 남습니다)</p>
+      <button class="btn" id="ch-delete" style="color:var(--danger)">채널 삭제</button>` : `<p class="sub">채널 삭제는 방장만 할 수 있어요.</p>`}
+    <div class="modal-actions"><button class="btn btn-primary" id="ch-close">닫기</button></div>`);
+  $("ch-close").onclick = closeModal;
+  $("ch-rename-save").onclick = async () => {
+    const nm = $("ch-rename-input").value.trim().replace(/^#/, "");
+    if (!nm) { toast("채널 이름을 입력하세요."); return; }
+    try {
+      await store.renameChannel(state.currentWsId, ch.id, nm);
+      $("chat-title").textContent = "# " + nm;
+      toast("채널 이름을 바꿨어요.");
+    } catch (e) { toast("변경 실패: " + (e.message || e) + " — 잠시 후 다시 시도하세요."); }
+  };
+  const del = $("ch-delete");
+  if (del) del.onclick = async () => {
+    if (del.dataset.armed !== "1") { del.dataset.armed = "1"; del.textContent = "정말 삭제할까요?"; setTimeout(() => { if (del.isConnected) { del.dataset.armed = ""; del.textContent = "채널 삭제"; } }, 2600); return; }
+    try { await store.deleteChannelDoc(state.currentWsId, ch.id); closeModal(); toast("채널을 삭제했어요."); }
+    catch (e) { toast("삭제 실패: " + (e.message || e) + " — 방장 권한인지 확인하세요."); }
+  };
 });
 
 setAuthMode("login");

@@ -186,6 +186,14 @@ export async function joinByCode(uid, rawCode, rawPin) {
   return wsName || "워크스페이스";
 }
 
+// 채널 이름 변경(멤버) · 삭제(규칙상 owner만 통과)
+export async function renameChannel(wsId, chId, name) {
+  await updateDoc(doc(db, "workspaces", wsId, "channels", chId), { name: String(name).slice(0, 60) });
+}
+export async function deleteChannelDoc(wsId, chId) {
+  await deleteDoc(doc(db, "workspaces", wsId, "channels", chId));
+}
+
 // ---------- 멤버 관리 ----------
 // owner 전용 강퇴 (규칙 (d))
 export async function kickMember(wsId, targetUid) {

@@ -80,8 +80,8 @@
     <nav class="sidebar" id="sidebar">
       <div class="ws-head">
         <div class="ws-head-name" id="ws-name">워크스페이스</div>
-        <button class="icon-btn labeled" id="ws-wiki-btn" title="팀 위키 — 팀이 쌓은 모든 지식" aria-label="팀 위키"><span class="ibl">위키</span><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z"/><path d="M4 20.5A2.5 2.5 0 0 1 6.5 18H20v3H6.5A2.5 2.5 0 0 1 4 20.5z"/></svg></button>
-        <button class="icon-btn labeled" id="ws-invite-btn" title="초대 / 워크스페이스 ID" aria-label="멤버 초대"><span class="ibl">초대</span><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 20a5.5 5.5 0 0 1 11 0"/><path d="M18 8v6M15 11h6"/></svg></button>
+        <button class="icon-btn" id="ws-wiki-btn" title="팀 위키 — 팀이 쌓은 모든 지식" aria-label="팀 위키"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 6c-2-1.5-4.5-2-8-2v14c3.5 0 6 .5 8 2 2-1.5 4.5-2 8-2V4c-3.5 0-6 .5-8 2z"/><path d="M12 6v14"/></svg></button>
+        <button class="icon-btn" id="ws-invite-btn" title="팀 설정 · 초대" aria-label="팀 설정과 초대"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 20a5.5 5.5 0 0 1 11 0"/><path d="M18 8v6M15 11h6"/></svg></button>
       </div>
 
       <div class="side-section">
@@ -106,7 +106,7 @@
           <span class="me-email" id="me-email"></span>
         </button>
         <button class="icon-btn" id="theme-btn" title="라이트 / 다크 전환" aria-label="테마 전환"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13.5A8 8 0 1 1 10.5 4a6.3 6.3 0 0 0 9.5 9.5z"/></svg></button>
-        <button class="icon-btn labeled" id="brain-btn" title="AI 설정 (Gemini / Hermes)" aria-label="AI 설정"><span class="ibl">AI</span><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9L17 7M7 17l-2.1 2.1"/></svg></button>
+        <button class="icon-btn" id="brain-btn" title="AI 설정 (Gemini / Hermes)" aria-label="AI 설정"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2.4"/><circle cx="8" cy="17" r="2.4"/></svg></button>
         <button class="icon-btn" id="logout-btn" title="로그아웃" aria-label="로그아웃"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5M21 12H9"/></svg></button>
       </div>
     </nav>
@@ -115,9 +115,7 @@
     <main class="chat">
       <header class="chat-head">
         <div class="chat-title" id="chat-title"># 채널을 선택하세요</div>
-        <label class="auto-toggle" id="auto-toggle-wrap" hidden title="켜면 @멘션 없이도, 질문(?)에 채널 대표 에이전트가 자율로 답합니다">
-          <input type="checkbox" id="auto-toggle" /> 자율개입
-        </label>
+        <button class="head-btn" id="auto-toggle" hidden title="켜면 @멘션 없이도, 질문(?)에 채널 대표 에이전트가 자율로 답합니다">자율개입</button>
         <button class="head-btn" id="summarize-btn" hidden title="긴 대화를 핵심/쟁점으로 압축한 카드를 채널에 남깁니다">대화 요약</button>
         <button class="head-btn" id="export-btn" hidden title="이 채널의 대화·산출물을 파일로 내보내기">내보내기</button>
         <div class="chat-agents" id="chat-agents"></div>

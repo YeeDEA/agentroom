@@ -966,6 +966,19 @@ $("messages").addEventListener("click", async (e) => {
     catch (err) { toast("삭제 실패: " + (err.message || err)); }
     return;
   }
+  // 이미지 클릭 → 라이트박스 (크게 보기)
+  const imgEl = e.target.closest(".msg-img");
+  if (imgEl) {
+    const lb = document.createElement("div");
+    lb.className = "lightbox";
+    lb.innerHTML = `<img src="${imgEl.src}" alt="확대 이미지" />`;
+    const close = () => { lb.remove(); document.removeEventListener("keydown", onKey); };
+    const onKey = (ev) => { if (ev.key === "Escape") close(); };
+    lb.onclick = close;
+    document.addEventListener("keydown", onKey);
+    document.body.appendChild(lb);
+    return;
+  }
   // ❄️ 동면 배지 클릭 → 업그레이드 모달
   const hibEl = e.target.closest(".msg-hibernate");
   if (hibEl) { openUpgradeModal("hibernate", { hibernated: Number(hibEl.dataset.n) || 0 }); return; }
@@ -1903,6 +1916,7 @@ $("ws-wiki-btn").onclick = async () => {
   $("wiki-search").focus();
 };
 
+$("ws-name").addEventListener("click", () => $("ws-invite-btn").click());
 $("ws-invite-btn").onclick = async () => {
   if (!state.currentWsId) return;
   const ws = state.workspaces.find((w) => w.id === state.currentWsId);
@@ -1916,7 +1930,7 @@ $("ws-invite-btn").onclick = async () => {
     const tags = (m === ws?.ownerId ? `<span class="mem-badge p">방장</span>` : "") +
       (m === myUid ? `<span class="mem-badge">나</span>` : "");
     const act = (isOwner && m !== myUid)
-      ? `<button class="mini-btn danger mem-kick" data-uid="${esc(m)}">내보내기</button>`
+      ? `<button class="mini-btn mem-transfer" data-uid="${esc(m)}">방장 넘기기</button><button class="mini-btn danger mem-kick" data-uid="${esc(m)}">내보내기</button>`
       : (m === myUid && !isOwner ? `<button class="mini-btn mem-leave">방 나가기</button>` : "");
     return `<div class="member-row"><span class="member-name">${esc(label)}</span>${tags}<span class="member-act">${act}</span></div>`;
   }).join("");
@@ -1930,6 +1944,7 @@ $("ws-invite-btn").onclick = async () => {
     <div class="invite-pin">🔒 비밀번호 <b>${esc(pin || "----")}</b></div>
     <div class="mem-head" style="margin-top:16px">👥 멤버 ${members.length}명</div>
     <div class="member-list">${memberRows || `<span class="mem-empty">멤버 정보를 불러오지 못했어요.</span>`}</div>
+    ${isOwner ? `<button class="btn ws-danger" id="ws-delete">팀 삭제 — 되돌릴 수 없어요</button>` : ""}
     <div class="modal-actions">
       <button class="btn" id="inv-copy">코드+비번 복사</button>
       <button class="btn btn-primary" id="inv-close">닫기</button>
@@ -1946,10 +1961,22 @@ $("ws-invite-btn").onclick = async () => {
       $("ws-name").textContent = nm;
     } catch (e) { toast("이름 변경 실패: " + (e.message || e) + " — 잠시 후 다시 시도하세요."); }
   };
+  const wsDel = $("ws-delete");
+  if (wsDel) wsDel.onclick = async () => {
+    if (wsDel.dataset.armed !== "1") { wsDel.dataset.armed = "1"; wsDel.textContent = "정말 삭제할까요? 모든 채널·대화가 사라집니다"; setTimeout(() => { if (wsDel.isConnected) { wsDel.dataset.armed = ""; wsDel.textContent = "팀 삭제 — 되돌릴 수 없어요"; } }, 3200); return; }
+    try { await store.deleteWorkspaceDoc(state.currentWsId); closeModal(); toast("팀을 삭제했어요."); }
+    catch (e) { toast("삭제 실패: " + (e.message || e) + " — 방장 권한인지 확인하세요."); }
+  };
   $("inv-copy").onclick = async () => {
     try { await navigator.clipboard.writeText(`AgentRoom 초대 — 코드: ${code} / 비밀번호: ${pin}`); } catch (_) {}
     $("inv-copy").textContent = "복사됨!";
   };
+  // 방장 이전 (2단계 확인) — 이전 후 나는 일반 멤버가 되어 '방 나가기' 가능
+  $("modal").querySelectorAll(".mem-transfer").forEach((b) => b.onclick = async () => {
+    if (b.dataset.armed !== "1") { b.dataset.armed = "1"; b.textContent = "정말 넘길까요?"; setTimeout(() => { if (b.isConnected) { b.dataset.armed = ""; b.textContent = "방장 넘기기"; } }, 2600); return; }
+    try { await store.transferOwnership(state.currentWsId, b.dataset.uid); closeModal(); toast("방장을 넘겼어요 — 이제 '방 나가기'도 가능합니다."); }
+    catch (e) { toast("이전 실패: " + (e.message || e) + " — 방장 권한인지 확인하세요."); }
+  });
   // owner 강퇴 (2단계 확인)
   $("modal").querySelectorAll(".mem-kick").forEach((b) => b.onclick = async () => {
     if (b.dataset.armed !== "1") { b.dataset.armed = "1"; b.textContent = "정말?"; setTimeout(() => { if (b.isConnected) { b.dataset.armed = ""; b.textContent = "내보내기"; } }, 2500); return; }

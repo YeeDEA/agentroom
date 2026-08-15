@@ -128,7 +128,14 @@ service cloud.firestore {
         uid() in request.resource.data.memberIds &&
         request.resource.data.createdAt is timestamp;
 
-      // 업데이트는 4가지 경우로만 분리 허용
+      // (e) 방장 이전: 현 owner가 다른 멤버에게만 넘길 수 있다 (ownerId만 변경)
+      allow update: if isAuthenticated() &&
+        uid() == resource.data.ownerId &&
+        changedKeys().hasOnly(['ownerId']) &&
+        request.resource.data.ownerId in resource.data.memberIds &&
+        request.resource.data.ownerId != resource.data.ownerId;
+
+      // 업데이트는 4가지 경우로만 분리 허용 (ownerId 불변 전제)
       allow update: if isAuthenticated() &&
         request.resource.data.ownerId == resource.data.ownerId && (
 

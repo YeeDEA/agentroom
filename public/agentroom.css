@@ -848,3 +848,20 @@ body { letter-spacing: -0.011em; }
 /* 채널명: 클릭 가능함을 암시 */
 .chat-title { cursor: pointer; border-radius: 8px; padding: 3px 8px; margin-left: -8px; }
 .chat-title:hover { background: var(--bg-3); }
+
+/* 이미지 라이트박스 */
+.msg-img { cursor: zoom-in; }
+.lightbox { position: fixed; inset: 0; z-index: 95; background: rgba(20,18,12,.82);
+  display: grid; place-items: center; padding: 4vmin; cursor: zoom-out;
+  animation: msg-in var(--t-sys) var(--ez-out); }
+.lightbox img { max-width: 92vw; max-height: 90vh; border-radius: 8px;
+  box-shadow: 0 16px 60px rgba(0,0,0,.5); }
+/* 멤버 행 버튼 여백 */
+.member-act { display: inline-flex; gap: 6px; }
+
+/* 팀 삭제 버튼 + 팀 이름 클릭 힌트 */
+.ws-danger { width: 100%; margin: 4px 0 12px; color: var(--danger); background: transparent;
+  border: 1px dashed color-mix(in srgb, var(--danger) 45%, transparent); font-size: 12.5px; }
+.ws-danger:hover { background: color-mix(in srgb, var(--danger) 8%, transparent); filter: none; }
+.ws-head-name { cursor: pointer; border-radius: 8px; padding: 2px 6px; margin-left: -6px; }
+.ws-head-name:hover { background: var(--bg-3); }

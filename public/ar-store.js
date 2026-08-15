@@ -194,6 +194,17 @@ export async function deleteChannelDoc(wsId, chId) {
   await deleteDoc(doc(db, "workspaces", wsId, "channels", chId));
 }
 
+// 팀(워크스페이스) 삭제 — 규칙상 owner만. 하위 컬렉션(채널·지식 등)은
+// Firestore가 연쇄 삭제하지 않아 문서만 남는다(프로토타입 한계, 접근은 규칙이 차단).
+export async function deleteWorkspaceDoc(wsId) {
+  await deleteDoc(doc(db, "workspaces", wsId));
+}
+
+// 방장 이전 — 규칙 (e): 현 owner만, 멤버에게만
+export async function transferOwnership(wsId, newOwnerUid) {
+  await updateDoc(doc(db, "workspaces", wsId), { ownerId: newOwnerUid });
+}
+
 // ---------- 멤버 관리 ----------
 // owner 전용 강퇴 (규칙 (d))
 export async function kickMember(wsId, targetUid) {

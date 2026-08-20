@@ -270,6 +270,7 @@ export async function sendMessage(wsId, chId, msg) {
     ...(msg.sources && msg.sources.length ? { sources: msg.sources.slice(0, 3) } : {}),
     ...(msg.sourceKids && msg.sourceKids.length ? { sourceKids: msg.sourceKids.slice(0, 3) } : {}),
     ...(msg.hibernated ? { hibernated: msg.hibernated } : {}),
+    ...(msg.hibernatedKids && msg.hibernatedKids.length ? { hibernatedKids: msg.hibernatedKids.slice(0, 5) } : {}),
     ...(msg.followups && msg.followups.length ? { followups: msg.followups.slice(0, 2) } : {}),
     createdAt: serverTimestamp(),
   });
@@ -617,6 +618,7 @@ export async function fetchTopMemories(wsId, agentId, k = 6, queryText = "", opt
   const now = Date.now();
   const HIBERNATE_MS = 90 * 86400000; // 무료 플랜: 90일 이전 지식은 동면(회수 제외, 삭제 아님)
   let hibernatedHits = 0;
+  const hibernatedTop = []; // 동면 중인데 게이트를 통과한 지식 — 깨우기 미리보기(원탁 Q1 '부활 모먼트')의 재료
   const scored = all.map((m, i) => {
     // 부패 루프: 👎 누적(trust ≤ -2) 지식은 회수 자체에서 제외 — 자신 있게 틀리는 퇴화 방지
     if ((m.trust || 0) <= -2) return { m, rel: 0, score: -1 };
@@ -624,7 +626,7 @@ export async function fetchTopMemories(wsId, agentId, k = 6, queryText = "", opt
     if (!pro && ageMs > HIBERNATE_MS) {
       // 동면 — 이 질문에 답할 수 있었는지(게이트 통과 여부)만 세고 제외
       let hh = 0; for (const t of qGrams) if (docGrams[i].has(t)) hh += idf(t);
-      if (qWeight && hh / qWeight >= RELEVANCE_GATE) hibernatedHits++;
+      if (qWeight && hh / qWeight >= RELEVANCE_GATE) { hibernatedHits++; hibernatedTop.push({ id: m.id, rel: hh / qWeight }); }
       return { m, rel: 0, score: -1 };
     }
     let hit = 0;
@@ -655,6 +657,7 @@ export async function fetchTopMemories(wsId, agentId, k = 6, queryText = "", opt
       topScore: pick.length ? pick[0].rel : 0,
       miss: pick.length === 0,          // 회수 실패 — 계측 대상
       hibernated: hibernatedHits,       // ❄️ 동면 중인데 이 질문에 답할 수 있었던 지식 수
+      hibernatedIds: hibernatedTop.sort((a, b) => b.rel - a.rel).slice(0, 5).map((h) => h.id),
       poolSize: all.length,
       mode: "relevance",
     },

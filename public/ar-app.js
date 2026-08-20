@@ -446,6 +446,7 @@ function selectWorkspace(wsId) {
   ["channels", "agents", "messages", "memories", "profiles"].forEach((k) => { if (state.unsub[k]) { state.unsub[k](); state.unsub[k] = null; } });
   state.currentWsId = wsId;
   state.currentChId = null; state.selectedAgentId = null;
+  exitChatView(); // 폰: 방을 바꾸면 채널 목록부터
   state.channels = []; state.agents = []; state.messages = []; state.memories = [];
   state.roomProfiles = {};
   state.unsub.profiles = store.listenRoomProfiles(wsId, (map) => { state.roomProfiles = map; renderMessages(); renderMe(); });
@@ -507,7 +508,7 @@ function renderChannels() {
     li.innerHTML = `<span class="chan-hash">#</span><span>${esc(ch.name)}</span>`
       + (unread ? `<span class="chan-unread" title="새 메시지"></span>` : "")
       + (n ? `<span class="chan-agentcount"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="16" height="11" rx="2.5"/><path d="M12 8V4.5M9.5 13h.01M14.5 13h.01"/></svg>${n}</span>` : "");
-    li.onclick = () => selectChannel(ch.id);
+    li.onclick = () => { selectChannel(ch.id); enterChatView(); }; // 폰: 탭하면 채팅으로
     ul.appendChild(li);
   }
   updateChannelControls();
@@ -520,6 +521,38 @@ function updateChannelControls() {
   $("auto-toggle").hidden = !has;
   if (has) $("auto-toggle").classList.toggle("on", !!(currentChannel() && currentChannel().autoIntervene));
 }
+
+// ======================= 모바일 내비게이션 =======================
+// ≤720px에서는 목록/채팅 중 하나만 화면에 있다(agentroom.css V10 블록과 한 쌍).
+// show-chat 클래스를 붙이는 주체가 없어서 폰에서 채팅에 도달할 수 없었다.
+const mqMobile = window.matchMedia("(max-width: 720px)");
+
+function enterChatView() {
+  if (!mqMobile.matches) return;
+  const av = $("app-view");
+  if (av.classList.contains("show-chat")) return;
+  av.classList.add("show-chat");
+  // 안드로이드 하드웨어 뒤로가기·iOS 스와이프가 사이트를 떠나지 않고 목록으로 오게
+  try { history.pushState({ ar: "chat" }, ""); } catch (_) {}
+}
+
+function exitChatView() {
+  const av = $("app-view");
+  if (!av.classList.contains("show-chat")) return;
+  // 우리가 넣은 히스토리 항목이 위에 있으면 back으로 되돌린다(항목이 쌓이지 않게)
+  if (history.state && history.state.ar === "chat") { history.back(); return; }
+  av.classList.remove("show-chat");
+}
+
+window.addEventListener("popstate", () => {
+  const av = $("app-view");
+  if (av) av.classList.remove("show-chat");
+});
+
+// 데스크톱 폭으로 넓어질 때 클래스가 남아 사이드바가 사라지는 것을 막는다
+const onMqMobileChange = () => { if (!mqMobile.matches) $("app-view").classList.remove("show-chat"); };
+if (mqMobile.addEventListener) mqMobile.addEventListener("change", onMqMobileChange);
+else if (mqMobile.addListener) mqMobile.addListener(onMqMobileChange);
 
 function selectChannel(chId) {
   state.currentChId = chId;
@@ -553,10 +586,12 @@ function wsIsPro() { return store.isPro(currentWs()); }
 
 // 업그레이드 모달 — 패널 결론: 판매자 언어 금지, 보유량 먼저, 준거점은 커피
 // 실결제 전이므로 '출시 알림'으로 지불 의향만 계측한다(upgrade_intent 이벤트).
-function openUpgradeModal(trigger, detail = {}) {
+function openUpgradeModal(trigger, detail = {}, hibKids = []) {
   const hib = detail.hibernated || 0;
   const lead = trigger === "hibernate"
     ? `팀이 가르쳐준 기억 중 <b>${hib}개</b>가 이 질문에 답할 수 있었지만, 90일이 지나 잠들어 있어요. 삭제된 게 아니에요 — Pro에서 깨울 수 있어요.`
+    : trigger === "hibernate-warn"
+    ? `이 기억은 곧 90일이 지나 잠들어요(답변에 쓰이지 않게 돼요). <b>삭제되는 게 아니에요</b> — Pro에서는 팀 기억이 영구히 깨어 있습니다.`
     : trigger === "backfill-again"
       ? `무료 플랜의 카톡 백필 1회를 이미 사용했어요. 동아리 단톡은 보통 3~5개 — <b>나머지 방의 기억도</b> 팀 지식으로 옮겨보세요.`
       : `무료 백필은 최근 500메시지까지예요. <b>작년 이맘때의 답은 501번째 메시지에 있을지도</b> 몰라요.`;
@@ -602,10 +637,32 @@ function openUpgradeModal(trigger, detail = {}) {
           team: team.slice(0, 80), commitToPay: commit, approver: approver.slice(0, 120), ...detail,
         });
       } catch (_) {}
+      // 원탁 Q1 '부활 모먼트': 동면 트리거에서 의향을 등록한 사람에겐
+      // 잠들어 있던 그 지식을 일회성으로 열람시킨다 — Pro 가치를 말이 아니라 실물로 증명.
+      if (trigger === "hibernate" && hibKids.length) { await showHibernatePeek(hibKids, commit); return; }
       closeModal();
       toast(commit ? "🙏 감사합니다 — 출시 소식을 가장 먼저 알려드릴게요." : "등록됐어요! 출시하면 알려드릴게요.");
     };
   };
+}
+
+// ❄️→🌅 동면 지식 일회성 열람 — 의향 등록 보상. 회수 게이트는 그대로(답변에 쓰이진 않음).
+async function showHibernatePeek(kids, committed) {
+  let items = [];
+  try { items = (await Promise.all(kids.slice(0, 5).map((id) => store.getKnowledge(state.currentWsId, id).catch(() => null)))).filter(Boolean); } catch (_) {}
+  if (!items.length) { closeModal(); toast("등록됐어요! 출시하면 알려드릴게요."); return; }
+  const rows = items.map((k) => {
+    const days = k.createdAt?.seconds ? Math.round((Date.now() - k.createdAt.seconds * 1000) / 86400000) : null;
+    return `<li class="mem-item${k.promoted ? " promoted" : ""}">
+      <div class="mem-meta"><span class="mem-badge">🌅 깨어남 (미리보기)</span>${days != null ? `<span class="mem-badge low">${days}일 전 학습</span>` : ""}</div>
+      ${esc(k.content)}</li>`;
+  }).join("");
+  openModal(`
+    <h3>🌅 잠들어 있던 기억이에요</h3>
+    <p class="sub">${committed ? "결제 의향 감사해요 — " : ""}방금 그 질문에 답할 수 있었던 지식이에요. Pro에서는 <b>결제 즉시 전부 깨어나</b> 답변에 다시 쓰입니다. 지금은 열람만 가능하고, <b>아무 금액도 청구되지 않습니다.</b></p>
+    <ul class="mem-list" style="max-height:260px;overflow-y:auto">${rows}</ul>
+    <div class="modal-actions"><button class="btn btn-primary" id="peek-close">닫기</button></div>`);
+  $("peek-close").onclick = closeModal;
 }
 function channelAgents() {
   const ch = currentChannel();
@@ -885,10 +942,17 @@ function msgHtml(m) {
     : "";
   // 🧠 근거 각주: 에이전트가 실제로 활용한 팀 학습 지식 표시 (신뢰 + "진짜 기억한다" 증명)
   const srcs = isAgent && Array.isArray(m.sources) && m.sources.length
-    ? `<div class="msg-sources">${m.sources.map((s, i) => `<span class="src-link" data-kid="${esc((m.sourceKids || [])[i] || "")}" title="클릭하면 원본 지식·출처로 이동">${esc(s)}</span>`).join(" · ")}</div>`
+    ? `<div class="msg-sources">${m.sources.map((s, i) => {
+        const kid = (m.sourceKids || [])[i] || "";
+        // 각주에 학습 시점(조교③): 이 지식이 '언제의 팀'에게 배운 것인지 — 상속의 증거
+        const k = kid ? state.memories.find((x) => x.id === kid) : null;
+        const learned = k?.createdAt?.seconds
+          ? `<span class="src-when">${new Date(k.createdAt.seconds * 1000).toLocaleDateString("ko-KR", { year: "2-digit", month: "numeric" })} 학습</span>` : "";
+        return `<span class="src-link" data-kid="${esc(kid)}" title="클릭하면 원본 지식·출처로 이동">${esc(s)}${learned}</span>`;
+      }).join(" · ")}</div>`
     : (isAgent && m.agentId ? `<div class="msg-nosrc">일반 지식으로 답변 — 팀 기억 미사용</div>` : "");
   const hib = isAgent && m.hibernated
-    ? `<div class="msg-hibernate" data-n="${m.hibernated}">❄️ 잠든 기억 ${m.hibernated}개가 이 질문에 답할 수 있었어요 — <b>깨우기</b></div>` : "";
+    ? `<div class="msg-hibernate" data-n="${m.hibernated}" data-kids="${esc((m.hibernatedKids || []).join(","))}">❄️ 잠든 기억 ${m.hibernated}개가 이 질문에 답할 수 있었어요 — <b>깨우기</b></div>` : "";
   return `<div class="msg${mine ? " mine" : ""}${m.promotedToMemory ? " promoted-msg" : ""}" data-msg-id="${m.id}">${ava}<div class="msg-body">
     <div class="msg-top"><span class="msg-name ${isAgent ? "agent" : ""}${mine ? " me" : ""}">${esc(dispName)}</span>${badge}<span class="msg-time">${fmtTime(m.createdAt)}</span>${m.promotedToMemory ? `<span class="promoted-chip">🧠 팀 기억</span>` : ""}</div>
     ${m.content ? `<div class="msg-text">${highlightMentions(m.content)}</div>` : ""}${img}${srcs}${hib}${praise}</div>${del}</div>`;
@@ -981,7 +1045,7 @@ $("messages").addEventListener("click", async (e) => {
   }
   // ❄️ 동면 배지 클릭 → 업그레이드 모달
   const hibEl = e.target.closest(".msg-hibernate");
-  if (hibEl) { openUpgradeModal("hibernate", { hibernated: Number(hibEl.dataset.n) || 0 }); return; }
+  if (hibEl) { openUpgradeModal("hibernate", { hibernated: Number(hibEl.dataset.n) || 0 }, (hibEl.dataset.kids || "").split(",").filter(Boolean)); return; }
   // 🧠 각주 클릭 → 원본 메시지로 점프, 없으면 지식 상세 (출처 사슬)
   const srcEl = e.target.closest(".src-link");
   if (srcEl) {
@@ -1421,7 +1485,7 @@ async function agentSpeak(agent, userText, awardAnswer = true) {
     const cites = (res.sources || []).map((n) => ({ t: String(memories[n - 1] || "").slice(0, 70), kid: retrieval.meta.ids[n - 1] || "" })).filter((c) => c.t);
     const ref = await store.sendMessage(wsId, chId, { senderId: agent.id, senderType: "agent", senderName: agent.name, content: res.reply, agentId: agent.id,
       sources: cites.map((c) => c.t), sourceKids: cites.map((c) => c.kid),
-      hibernated: retrieval.meta.hibernated || 0, followups: res.followups || [] });
+      hibernated: retrieval.meta.hibernated || 0, hibernatedKids: retrieval.meta.hibernatedIds || [], followups: res.followups || [] });
     recordAnswerMetric({ wsId, agent, ref, res, retrieval, t0 });
     if (res.ok && awardAnswer) await awardExp(agent.id, EXP.ANSWER, 0, 1);
   } catch (err) { console.error(err); }
@@ -1543,7 +1607,7 @@ async function triggerAgent(agent, userText) {
       senderId: agent.id, senderType: "agent", senderName: agent.name,
       content: res.reply, agentId: agent.id,
       sources: cites.map((c) => c.t), sourceKids: cites.map((c) => c.kid),
-      hibernated: retrieval.meta.hibernated || 0, followups: res.followups || [],
+      hibernated: retrieval.meta.hibernated || 0, hibernatedKids: retrieval.meta.hibernatedIds || [], followups: res.followups || [],
     });
     recordAnswerMetric({ wsId, agent, ref, res, retrieval, t0 });
     if (res.ok) {
@@ -1751,6 +1815,17 @@ function renderMemories() {
     return;
   }
   const chName = (id) => (state.channels.find((c) => c.id === id) || {}).name;
+  const pro = wsIsPro();
+  // 90일 동면 임박 배지(원탁 Q4): D-30부터 예고, D-14부터 강조. 어디서든 "삭제 아님"을 명문.
+  const hibBadge = (m) => {
+    if (pro || !m.createdAt?.seconds) return "";
+    const age = (Date.now() - m.createdAt.seconds * 1000) / 86400000;
+    const d = Math.ceil(90 - age);
+    if (d <= 0) return `<span class="mem-badge hib" title="90일이 지나 답변에 쓰이지 않아요. 삭제된 게 아니에요 — Pro에서 깨울 수 있어요.">❄️ 동면 중</span>`;
+    if (d <= 14) return `<span class="mem-badge hib soon" title="D-${d} 후 답변에 쓰이지 않게 돼요. 삭제되지 않습니다 — Pro에서 계속 깨어 있어요.">❄️ D-${d} 동면 예정</span>`;
+    if (d <= 30) return `<span class="mem-badge hib" title="D-${d} 후 답변에 쓰이지 않게 돼요. 삭제되지 않습니다.">❄️ D-${d}</span>`;
+    return "";
+  };
   ul.innerHTML = state.memories.map((m) => {
     const src = [];
     if (m.sourceAgentName) src.push(`🤖 ${esc(m.sourceAgentName)}`);
@@ -1763,6 +1838,7 @@ function renderMemories() {
         <span class="mem-badge${m.promoted ? " p" : ""}">${m.promoted ? "🧠 승격" : "자동"}</span>
         ${m.masked ? `<span class="mem-badge mask" title="개인정보가 가려져 저장됨: ${esc((m.maskedKinds || []).join(", "))}">🔒 마스킹</span>` : ""}
         ${(m.trust || 0) <= -2 ? `<span class="mem-badge low" title="👎가 쌓여 답변에 더 이상 쓰이지 않아요. 필요 없으면 삭제하세요.">⚠️ 신뢰 낮음</span>` : (m.trust || 0) < 0 ? `<span class="mem-badge low">👎 ${-m.trust}</span>` : ""}
+        ${hibBadge(m)}
         <span class="mem-acts">${m.promoted ? "" : `<button class="mem-act mem-up" data-id="${m.id}" title="팀 지식으로 승격 — 모든 에이전트가 우선 반영">🧠</button>`}<button class="mem-act mem-del" data-id="${m.id}" title="이 지식 삭제">✕</button></span>
       </div>
       ${esc(m.content)}
@@ -1779,6 +1855,7 @@ function renderMemories() {
       toast("지식을 삭제했어요.");
     } catch (e) { toast("삭제 실패: " + (e.message || e) + " — 네트워크 확인 후 다시 시도하세요."); }
   });
+  ul.querySelectorAll(".mem-badge.hib").forEach((b) => b.onclick = () => openUpgradeModal("hibernate-warn"));
 }
 
 function triggerEat() {
@@ -1851,8 +1928,9 @@ function openWorkspaceModal() {
     if (!name) return;
     $("mk-ws-go").disabled = true;
     try {
+      // createWorkspace 안의 seedOnboarding이 '일반' 채널+가이드봇+환영카드를 이미 만든다.
+      // 여기서 또 만들면 빈 '일반'이 중복 생성돼 첫 화면이 고장난 것처럼 보인다 (08-12 회귀).
       const wsId = await store.createWorkspace(state.user.uid, name);
-      await store.createChannel(wsId, "일반", state.user.uid);
       closeModal();
       setTimeout(() => selectWorkspace(wsId), 300);
       toast("워크스페이스를 만들었어요 🎉");
@@ -2156,5 +2234,7 @@ $("chat-title").addEventListener("click", () => {
     catch (e) { toast("삭제 실패: " + (e.message || e) + " — 방장 권한인지 확인하세요."); }
   };
 });
+
+$("mobile-back").onclick = exitChatView;
 
 setAuthMode("login");

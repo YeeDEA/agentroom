@@ -5,12 +5,8 @@
 
 > *A Discord-style team workspace where AI agents learn from your conversations, remember your team's decisions, and grow from egg to adult.*
 
-🔗 **라이브 데모**: https://yonsei-yongjun-biz-prototype.web.app — 로그인 없이 20초 샘플 흐름부터 볼 수 있습니다
+🔗 **라이브 데모**: https://yonsei-yongjun-biz-prototype.web.app
 📚 **문서 체계**: [docs/00_INDEX.md](docs/00_INDEX.md) — PRD · 백로그 전수 · 결정로그 · 지표 · 수익화 · 시연 가이드
-
-> **현재 실사용 검증 중** — GDGoC Yonsei 챕터 **35명**을 대상으로 실제 팀 운영에 투입해 관찰하고 있고,
-> 팔로워 **9,000명** 규모 채널을 통해 공개 베타 참여자를 모집하고 있습니다.
-> 제품 안에 계측이 붙어 있어(`/metrics`) 회수 정확도·만족도·응답 시간을 주 단위로 기록합니다.
 
 ---
 
@@ -38,22 +34,10 @@ AgentRoom은 이 딜레마를 **소멸시킵니다** — 에이전트가 팀이 
 ### 🐣 에이전트 육성 (8-bit)
 알(Egg) → 부화 → 성장기 → 성숙기. EXP는 **메시지 수가 아니라** 지식 학습·유용한 답변·팀원 피드백(👍)으로 쌓입니다(어뷰징 방지).
 
-### 🎙️ 회의 녹음 → 팀 지식
-한 사람이 녹음을 시작하면 브라우저가 실시간 전사하고, 결정·담당·마감으로 구조화된 회의록 초안을 만듭니다.
-**오디오 파일은 저장하지 않으며**, 사람이 검토·승인한 텍스트만 채널과 팀 지식에 남습니다.
-
-### ⚡ Building Day · 시각 브리프
-- **Building Day** — 채널 맥락으로 `Plan → Action → Judge`를 한 번에 남기는 집중 작업 세션
-- **16:9 시각 브리프** — 팀 지식을 한 줄 결론 / 근거 / 다음 행동 / 확인 필요 네 칸으로 정리해 그대로 공유
-
-### 🔒 개인정보 자동 마스킹
-주민번호·카드번호·전화번호·이메일·계좌번호·여권번호를 **서버에 저장되기 전 단계**에서 자동으로 가립니다.
-마스킹된 지식에는 🔒 배지가 남아 무엇이 가려졌는지 알 수 있습니다.
-
-### ⌨️ 슬래시 명령어 19종
+### ⌨️ 슬래시 명령어 15종
 | 협업형 (에이전트 발언이 그대로 보임) | 산출물형 |
 |---|---|
-| `/discuss` 원탁 토론 · `/brainstorm` 아이디어 발산 · `/score` 1~10 채점 | `/plan` `/pitch` `/canvas` `/swot` `/tasks` `/decide` `/name` `/viz`(다이어그램) `/brief`(16:9 브리프) `/summary` `/decisions` `/metrics`(신뢰 지표) `/buildday` `/import`(카톡 백필) `/export`(md·html·json·csv·txt) |
+| `/discuss` 원탁 토론 · `/brainstorm` 아이디어 발산 · `/score` 1~10 채점 | `/plan` `/pitch` `/canvas` `/swot` `/tasks` `/decide` `/name` `/viz`(다이어그램) `/summary` `/decisions` `/export`(md·html·json·csv·txt) |
 
 ### 🔌 두뇌 교체 (Gemini ↔ Hermes)
 프로바이더 계층으로 LLM을 갈아끼울 수 있습니다. Hermes(오픈모델)는 **BYOK** 방식 — 키는 사용자 브라우저에만 저장되고, 실패 시 Gemini로 자동 폴백합니다.

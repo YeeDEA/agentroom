@@ -37,7 +37,7 @@
 6. 검증 후 데모 데이터 원복(trust 리셋 등) — 시연 오염 금지
 
 ## 계정 / 시연
-demo@agentroom.app / demo1234 (멘토 공유됨) · tester@agentroom.app / test1234
+demo@agentroom.app (멘토 공유됨) · tester@agentroom.app — 비밀번호는 저장소에 두지 않음(공개 레포). 대표에게 문의
 방·시연 순서·주의사항: [docs/07_시연_가이드.md](docs/07_시연_가이드.md)
 
 ## 진행 중인 검증 (2026-08 · 코드보다 우선)

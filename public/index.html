@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AgentRoom — 팀의 집단지성을 먹고 자라는 AI 워크스페이스</title>
-  <meta name="description" content="디스코드처럼 채널에서 팀과 대화하고, 알에서 깨어나 자라는 AI 에이전트를 함께 키우는 협업 워크스페이스." />
+  <title>AgentRoom — 회의록이 팀의 다음 결정을 기억하게</title>
+  <meta name="description" content="카톡과 회의록을 넣으면 AI가 결정·담당·마감을 팀 기억으로 만들고, 다음 질문에 근거 각주와 함께 답합니다." />
   <!-- 초기 로딩 속도: CDN 연결을 미리 열고, 첫 화면에 필요한 모듈을 병렬 선반입 -->
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
@@ -31,19 +31,75 @@
   <!-- ================= 인증 화면 ================= -->
   <div id="auth-view" class="auth-view">
    <div class="auth-wrap">
-    <div class="auth-hero">
-      <div class="auth-brand big"><span class="logo-egg">🥚</span> <b>Agent<span class="lime">Room</span></b></div>
-      <h1 class="hero-h1">당신의 팀에게 <span class="lime">죽지 않는 기억</span>을</h1>
-      <p class="hero-lead">공지·결정·자료가 채팅에 흘러가 사라지고, 사람이 바뀔 때마다 처음부터 다시 설명합니다. AgentRoom의 AI 팀원은 <b>연락 속 결정과 맥락을 스스로 기억</b>해, 물어보면 근거와 함께 답하고 다음 기수에게 그대로 물려줍니다.</p>
-      <div class="hero-points">
-        <div class="hp"><b>🔁 인수인계가 사라집니다</b><span>선배가 나가도 "작년엔 왜 이렇게 했지?"에 근거와 함께 답하는 팀 위키</span></div>
-        <div class="hp"><b>💬 대화가 곧 자산</b><span>따로 기록하지 않아도, 오늘 나눈 대화가 내일의 답이 됩니다</span></div>
-        <div class="hp"><b>🐣 팀이 기르는 AI 팀원</b><span>알에서 성숙기까지 — 팀의 집단지성을 먹고 자라는 에이전트</span></div>
+    <main class="auth-hero">
+      <div class="public-brand-row">
+        <div class="auth-brand big"><span class="logo-egg">🥚</span> <b>Agent<span class="lime">Room</span></b></div>
+        <span class="public-audience">매 학기 사람이 바뀌는 팀을 위한 AI 기억</span>
       </div>
-    </div>
-    <div class="auth-card">
+      <p class="hero-kicker">회의록 1개를 넣으면, 다음 회의가 달라집니다</p>
+      <h1 class="hero-h1">회의는 끝나도<br><span class="lime">결정의 맥락은 남게.</span></h1>
+      <p class="hero-lead">카톡·회의록을 넣으면 AgentRoom이 <b>결정·담당·마감</b>을 팀 기억으로 만들고, 다음 질문에 <b>근거 각주</b>와 함께 답합니다. 문서를 다시 적거나 채팅을 끝없이 검색하지 않아도 됩니다.</p>
+
+      <section class="public-demo" id="public-demo" aria-labelledby="public-demo-title">
+        <div class="public-demo-head">
+          <div>
+            <span class="demo-eyebrow">샘플 팀 · 축제준비위원회</span>
+            <h2 id="public-demo-title">AI가 회의 뒤에 남기는 것</h2>
+          </div>
+          <span class="demo-duration">로그인 없이 20초</span>
+        </div>
+
+        <div class="demo-step-tabs" role="tablist" aria-label="AgentRoom 작동 단계">
+          <button class="demo-step is-active" id="demo-tab-0" type="button" role="tab" aria-selected="true" aria-controls="demo-panel-0" data-demo-step="0"><b>1</b> 회의록 입력</button>
+          <button class="demo-step" id="demo-tab-1" type="button" role="tab" aria-selected="false" aria-controls="demo-panel-1" data-demo-step="1"><b>2</b> AI 개입</button>
+          <button class="demo-step" id="demo-tab-2" type="button" role="tab" aria-selected="false" aria-controls="demo-panel-2" data-demo-step="2"><b>3</b> 다음 회의</button>
+        </div>
+
+        <div class="demo-stage" aria-live="polite">
+          <article class="demo-panel is-active" id="demo-panel-0" role="tabpanel" aria-labelledby="demo-tab-0" data-demo-panel="0">
+            <div class="demo-file-row"><span class="demo-file-icon">TXT</span><div><b>8월 운영회의.txt</b><small>카톡 내보내기 또는 회의록 붙여넣기</small></div><span class="demo-file-count">43줄</span></div>
+            <div class="demo-chat-log">
+              <p><b>민지</b> 디자인 업체는 온보딩이 빠른 B안으로 가자.</p>
+              <p><b>준호</b> 예산은 70만원. 수요일까지 3곳 견적 받아볼게.</p>
+              <p><b>민지</b> 좋아요. 금요일 회의에서 최종 확정!</p>
+            </div>
+            <p class="demo-note">잡담은 건너뛰고 결정·일정·역할만 선별합니다.</p>
+          </article>
+
+          <article class="demo-panel" id="demo-panel-1" role="tabpanel" aria-labelledby="demo-tab-1" data-demo-panel="1" hidden>
+            <div class="demo-result-head"><span>AGENTROOM이 정리한 팀 기억</span><b>출처 표시됨</b></div>
+            <div class="demo-memory-grid">
+              <div><span>결정</span><strong>온보딩 속도를 우선해 B안 검토</strong></div>
+              <div><span>담당 · 마감</span><strong>준호 · 수요일까지 3곳 견적</strong></div>
+              <div><span>다음 결정</span><strong>금요일 회의에서 업체 최종 확정</strong></div>
+            </div>
+            <div class="demo-source-chip">🧠 카톡 백필 · 8월 운영회의</div>
+          </article>
+
+          <article class="demo-panel" id="demo-panel-2" role="tabpanel" aria-labelledby="demo-tab-2" data-demo-panel="2" hidden>
+            <div class="demo-question"><span>새 운영진</span><p>@기획봇, 왜 B안으로 정했지? 지금 뭘 해야 해?</p></div>
+            <div class="demo-answer"><div class="demo-agent-dot">AI</div><div><b>온보딩 속도를 우선했기 때문이에요.</b><p>준호가 수요일까지 3곳 견적을 받고, 금요일 회의에서 최종 업체를 확정하기로 했습니다.</p><span class="demo-citation">🧠 근거 1 · 카톡 백필</span></div></div>
+            <p class="demo-note success">메시지를 찾는 대신, 결정과 다음 행동을 바로 이어갑니다.</p>
+          </article>
+        </div>
+
+        <div class="demo-controls">
+          <p id="demo-caption">팀이 원래 쓰던 회의록을 그대로 넣어보세요.</p>
+          <button class="btn btn-primary demo-next" id="demo-next" type="button">AI 개입 보기 →</button>
+        </div>
+      </section>
+
+      <div class="memory-loop" aria-label="반복 사용 흐름">
+        <div><b>01</b><span>회의록을 넣고</span></div><i>→</i>
+        <div><b>02</b><span>결정으로 다시 묻고</span></div><i>→</i>
+        <div><b>03</b><span>팀 기억을 더 정확하게</span></div>
+      </div>
+      <p class="public-positioning"><b>문서를 다시 정리하거나 채팅을 끝없이 찾는 대신,</b> AgentRoom은 팀이 하던 대화에서 배우고 다음 결정 순간에 근거로 돌아옵니다.</p>
+      <p class="public-first-customer">학생회·동아리·스타트업·프로젝트팀처럼 <b>사람이 함께 판단하고 다음 행동을 정하는 모든 팀</b>을 위한 팀 기억입니다.</p>
+    </main>
+    <aside class="auth-card">
       <div class="auth-brand"><span class="logo-egg">🥚</span> <b>Agent<span class="lime">Room</span></b></div>
-      <p class="auth-tag">팀의 집단지성을 먹고 자라는 AI 워크스페이스</p>
+      <p class="auth-tag">우리 팀의 첫 기억을 만들어보세요</p>
 
       <div class="auth-tabs">
         <button class="auth-tab is-active" id="tab-login" type="button">로그인</button>
@@ -66,8 +122,9 @@
         <button class="btn btn-primary btn-block" id="au-submit" type="submit">로그인</button>
         <p class="auth-msg" id="auth-msg" role="status"></p>
       </form>
-      <p class="auth-hint">데모용 프로토타입 · Firebase Auth(이메일/비밀번호)</p>
-    </div>
+      <button class="demo-jump" id="demo-jump" type="button">로그인 전 샘플 흐름 다시 보기 ↑</button>
+      <p class="auth-hint">프로토타입 · 실제 결제 없음 · 질문과 팀 지식 입력은 무료</p>
+    </aside>
    </div>
   </div>
 
@@ -116,7 +173,9 @@
       <header class="chat-head">
         <button class="head-btn mobile-back" id="mobile-back" title="채널 목록으로" aria-label="채널 목록으로"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
         <div class="chat-title" id="chat-title"># 채널을 선택하세요</div>
+        <button class="head-btn" id="building-day-btn" hidden title="Plan → Action → Judge 집중 세션">⚡ Building Day</button>
         <button class="head-btn" id="auto-toggle" hidden title="켜면 @멘션 없이도, 질문(?)에 채널 대표 에이전트가 자율로 답합니다">자율개입</button>
+        <button class="head-btn" id="visual-brief-btn" hidden title="팀 지식을 16:9 시각 브리프로 정리">🖼️ 시각 브리프</button>
         <button class="head-btn" id="summarize-btn" hidden title="긴 대화를 핵심/쟁점으로 압축한 카드를 채널에 남깁니다">대화 요약</button>
         <button class="head-btn" id="export-btn" hidden title="이 채널의 대화·산출물을 파일로 내보내기">내보내기</button>
         <div class="chat-agents" id="chat-agents"></div>
@@ -126,11 +185,13 @@
       <div class="cmd-palette" id="mention-palette" hidden></div>
       <form class="composer" id="composer">
         <button class="attach-btn" id="suggest-btn" type="button" title="뭘 물어볼지 모를 때 — 팀 지식 기반 질문 추천" aria-label="질문 추천"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 4.6L18.5 9.5l-4.6 1.9L12 16l-1.9-4.6L5.5 9.5l4.6-1.9z"/><path d="M18 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z"/></svg></button>
+        <button class="attach-btn record-btn" id="record-btn" type="button" title="회의 녹음 시작 — 종료하면 전사문이 팀 지식 초안으로 저장됩니다" aria-label="회의 녹음 시작"><svg class="record-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="3" width="8" height="12" rx="4"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6"/></svg><span id="record-label" class="sr-only">녹음</span></button>
         <button class="attach-btn" id="attach-btn" type="button" title="이미지 첨부 (자동 압축)" aria-label="이미지 첨부"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.5l-8.5 8.5a5 5 0 0 1-7-7l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7l-8.5 8.5a1.6 1.6 0 0 1-2.3-2.3l7.8-7.8"/></svg></button>
         <input id="attach-input" type="file" accept="image/*" hidden />
         <textarea id="composer-input" rows="1" placeholder="메시지 입력…  에이전트를 부르려면 @이름" autocomplete="off"></textarea>
         <button class="btn btn-primary" id="composer-send" type="submit">보내기</button>
       </form>
+      <div class="record-status" id="record-status" hidden><span class="record-dot"></span><span>회의 녹음 중 · 종료하면 전사문을 팀 지식으로 반영합니다</span></div>
       <p class="composer-hint" id="composer-hint"><b>@멘션</b>하면 팀이 쌓아온 지식으로 답합니다 · 중요한 메시지는 <b>🧠</b>로 팀 기억에 승격 · 👍로 성장<span style="opacity:.5"> · type <code>/</code> for commands</span></p>
     </main>
 

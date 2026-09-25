@@ -49,6 +49,45 @@ const wsInitial = (s) => {
   }
   return "#";
 };
+
+// ---------- 로그인 전 20초 제품 데모 ----------
+// 실제 AI 호출 없이 제품의 핵심 루프(입력→구조화→근거 답변)를 보여준다.
+// 공개 화면에서 "무엇을 넣고 무엇을 얻는지"를 먼저 이해시키기 위한 제출용 데모다.
+const publicDemoTabs = [...document.querySelectorAll("[data-demo-step]")];
+const publicDemoPanels = [...document.querySelectorAll("[data-demo-panel]")];
+const publicDemoCaptions = [
+  "팀이 원래 쓰던 회의록을 그대로 넣어보세요.",
+  "AI가 잡담 속 결정·담당·마감을 출처와 함께 기억합니다.",
+  "다음 회의에서는 과거 맥락과 지금 할 일을 근거 각주로 답합니다.",
+];
+const publicDemoActions = ["AI 개입 보기 →", "근거 답변 보기 →", "처음부터 다시 보기 ↺"];
+let publicDemoStep = 0;
+
+function showPublicDemoStep(nextStep) {
+  publicDemoStep = Math.max(0, Math.min(2, Number(nextStep) || 0));
+  publicDemoTabs.forEach((tab, i) => {
+    const active = i === publicDemoStep;
+    tab.classList.toggle("is-active", active);
+    tab.setAttribute("aria-selected", String(active));
+  });
+  publicDemoPanels.forEach((panel, i) => {
+    const active = i === publicDemoStep;
+    panel.hidden = !active;
+    panel.classList.toggle("is-active", active);
+  });
+  const caption = $("demo-caption");
+  const next = $("demo-next");
+  if (caption) caption.textContent = publicDemoCaptions[publicDemoStep];
+  if (next) next.textContent = publicDemoActions[publicDemoStep];
+}
+
+publicDemoTabs.forEach((tab) => {
+  tab.onclick = () => showPublicDemoStep(tab.dataset.demoStep);
+});
+if ($("demo-next")) $("demo-next").onclick = () => showPublicDemoStep((publicDemoStep + 1) % 3);
+if ($("demo-jump")) $("demo-jump").onclick = () => {
+  $("public-demo")?.scrollIntoView({ behavior: "smooth", block: "center" });
+};
 // 방 프로필(이모지/닉네임) 우선, 없으면 이름 첫 글자
 function avatarEmojiFor(uid) {
   const p = state.roomProfiles[uid];
@@ -516,6 +555,8 @@ function renderChannels() {
 
 function updateChannelControls() {
   const has = !!state.currentChId;
+  $("building-day-btn").hidden = !has;
+  $("visual-brief-btn").hidden = !has;
   $("summarize-btn").hidden = !has;
   $("export-btn").hidden = !has;
   $("auto-toggle").hidden = !has;
@@ -940,6 +981,7 @@ function msgHtml(m) {
         ? `<img class="msg-img" src="${esc(safeImg)}" alt="첨부 이미지" loading="lazy">`
         : `<div class="msg-img-blocked">🚫 허용되지 않은 형식의 이미지라 표시하지 않았어요.</div>`)
     : "";
+  const imageCard = m.imageCard ? `<div class="image-card"><div class="image-card-title">${esc(m.imageCard.title || "이미지 기록")}</div><div><b>내용</b>${esc(m.imageCard.detail || "")}</div>${m.imageCard.decision ? `<div><b>결정·근거</b>${esc(m.imageCard.decision)}</div>` : ""}${m.imageCard.action ? `<div><b>다음 행동</b>${esc(m.imageCard.action)}</div>` : ""}</div>` : "";
   // 🧠 근거 각주: 에이전트가 실제로 활용한 팀 학습 지식 표시 (신뢰 + "진짜 기억한다" 증명)
   const srcs = isAgent && Array.isArray(m.sources) && m.sources.length
     ? `<div class="msg-sources">${m.sources.map((s, i) => {
@@ -955,7 +997,7 @@ function msgHtml(m) {
     ? `<div class="msg-hibernate" data-n="${m.hibernated}" data-kids="${esc((m.hibernatedKids || []).join(","))}">❄️ 잠든 기억 ${m.hibernated}개가 이 질문에 답할 수 있었어요 — <b>깨우기</b></div>` : "";
   return `<div class="msg${mine ? " mine" : ""}${m.promotedToMemory ? " promoted-msg" : ""}" data-msg-id="${m.id}">${ava}<div class="msg-body">
     <div class="msg-top"><span class="msg-name ${isAgent ? "agent" : ""}${mine ? " me" : ""}">${esc(dispName)}</span>${badge}<span class="msg-time">${fmtTime(m.createdAt)}</span>${m.promotedToMemory ? `<span class="promoted-chip">🧠 팀 기억</span>` : ""}</div>
-    ${m.content ? `<div class="msg-text">${highlightMentions(m.content)}</div>` : ""}${img}${srcs}${hib}${praise}</div>${del}</div>`;
+    ${m.content ? `<div class="msg-text">${highlightMentions(m.content)}</div>` : ""}${img}${imageCard}${srcs}${hib}${praise}</div>${del}</div>`;
 }
 
 function thinkingHtml(p) {
@@ -1180,6 +1222,148 @@ function applyMention(name) {
   input.style.height = "auto"; input.style.height = Math.min(160, input.scrollHeight) + "px";
 }
 
+// 🎙️ 회의 녹음 MVP — 한 사람이 시작/종료하면 브라우저 전사 → 읽기 좋은 회의록 초안 → 팀 지식 순서로 반영한다.
+// 오디오 파일은 저장하지 않고, 사용자가 승인한 텍스트만 채널/지식에 남긴다.
+const meetingCapture = {
+  active: false, stream: null, recognition: null,
+  finalText: "", interimText: "", startedAt: null,
+};
+
+function setRecordUI(active) {
+  const btn = $("record-btn"), label = $("record-label"), status = $("record-status");
+  if (!btn || !label || !status) return;
+  btn.classList.toggle("is-recording", active);
+  btn.setAttribute("aria-label", active ? "회의 녹음 종료" : "회의 녹음 시작");
+  btn.title = active ? "녹음 종료 — 전사문을 팀 지식으로 반영" : "회의 녹음 시작 — 종료하면 전사문이 팀 지식 초안으로 저장됩니다";
+  label.textContent = active ? "종료" : "녹음";
+  status.hidden = !active;
+}
+
+function liveTranscript() {
+  return [meetingCapture.finalText, meetingCapture.interimText].filter(Boolean).join(" ").trim();
+}
+
+function transcriptChunks(text, max = 720) {
+  const clean = String(text || "").replace(/\s+/g, " ").trim();
+  const chunks = [];
+  let rest = clean;
+  while (rest && chunks.length < 4) {
+    if (rest.length <= max) { chunks.push(rest); break; }
+    const cut = Math.max(rest.lastIndexOf(". ", max), rest.lastIndexOf("다. ", max), rest.lastIndexOf(" ", max));
+    chunks.push(rest.slice(0, cut > 120 ? cut + 1 : max).trim());
+    rest = rest.slice(cut > 120 ? cut + 1 : max).trim();
+  }
+  return chunks;
+}
+
+async function saveMeetingTranscript(rawText) {
+  const transcript = String(rawText || "").trim();
+  if (!transcript || !state.currentWsId || !state.currentChId) {
+    toast("전사된 내용이 없어 팀 지식에는 저장하지 않았어요.");
+    return;
+  }
+  const stamp = new Date().toLocaleString("ko-KR", { dateStyle: "medium", timeStyle: "short" });
+  const masked = store.maskPII(transcript);
+  const message = await store.sendMessage(state.currentWsId, state.currentChId, {
+    senderId: state.user.uid, senderType: "user", senderName: meName(),
+    content: `🎙️ 회의 기록 · ${stamp}${masked.masked ? ` · 개인정보 ${masked.kinds.join(", ")} 마스킹` : ""}\n${masked.text.slice(0, 7600)}`,
+  });
+  const chunks = transcriptChunks(masked.text);
+  await Promise.all(chunks.map((chunk, i) => store.addKnowledge(state.currentWsId, {
+    content: `회의 전사 ${i + 1}/${chunks.length} · ${stamp}\n${chunk}`,
+    promoted: true,
+    sourceChannelId: state.currentChId,
+    sourceMessageId: message.id,
+    learnedFrom: "회의 녹음 전사",
+    promotedBy: state.user.uid,
+  })));
+  toast(`🎙️ 다듬은 회의 기록과 팀 지식 ${chunks.length}건을 반영했어요.`);
+}
+
+function transcriptDraftText(draft, fallback) {
+  if (!draft) return fallback;
+  const lines = [
+    `# ${draft.title || "회의 기록"}`,
+    draft.summary?.length ? `\n## 핵심 논의\n${draft.summary.map((x) => `- ${x}`).join("\n")}` : "",
+    draft.decisions?.length ? `\n## 결정\n${draft.decisions.map((x) => `- ${x}`).join("\n")}` : "",
+    draft.actions?.length ? `\n## 다음 행동\n${draft.actions.map((x) => `- ${x}`).join("\n")}` : "",
+    draft.openIssues?.length ? `\n## 확인 필요\n${draft.openIssues.map((x) => `- ${x}`).join("\n")}` : "",
+    `\n## 다듬은 전사\n${draft.cleanTranscript || fallback}`,
+  ];
+  return lines.filter(Boolean).join("\n").trim();
+}
+
+async function openTranscriptReview(text, note = "") {
+  openModal(`<h3>🎙️ 회의 기록 다듬는 중…</h3><p class="sub">원문을 바꾸지 않고, 핵심 논의·결정·다음 행동·확인 필요로 나눕니다.</p>`);
+  const draft = text ? await ai.refineTranscript(text) : null;
+  const formatted = transcriptDraftText(draft, text || "");
+  openModal(`<h3>🎙️ 회의 기록 반영</h3>
+    <p class="sub">${esc(note || "브라우저 음성 인식 서비스가 전사 처리했습니다. 오디오는 저장하지 않으며, 아래 승인본만 팀 지식에 반영합니다.")}</p>
+    <div class="field"><textarea id="record-review" rows="14" placeholder="회의 전사문 또는 회의 기록을 입력하세요">${esc(formatted)}</textarea></div>
+    <div class="modal-actions"><button class="btn" id="record-review-cancel">취소</button><button class="btn btn-primary" id="record-review-save">팀 지식에 반영</button></div>`);
+  $("record-review-cancel").onclick = closeModal;
+  $("record-review-save").onclick = async () => {
+    const value = $("record-review").value.trim();
+    if (!value) { toast("전사문을 입력해 주세요."); return; }
+    const btn = $("record-review-save"); btn.disabled = true; btn.textContent = "반영 중…";
+    try { await saveMeetingTranscript(value); closeModal(); }
+    catch (err) { btn.disabled = false; btn.textContent = "팀 지식에 반영"; toast("전사 저장 실패: " + (err.message || err)); }
+  };
+}
+
+async function startMeetingCapture() {
+  if (!state.currentChId) { toast("먼저 회의 채널을 선택하세요."); return; }
+  if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+    openTranscriptReview("", "마이크 권한은 HTTPS 환경에서만 사용할 수 있어요. 회의 전사문을 붙여 넣으면 같은 방식으로 팀 지식에 저장합니다.");
+    return;
+  }
+  if (!window.confirm("참석자 모두에게 녹음 사실을 알리고 동의를 받았나요?\n브라우저 음성 인식 서비스가 전사 처리하며, 승인한 회의 기록만 팀 지식에 저장됩니다.")) return;
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+    meetingCapture.stream = stream;
+    meetingCapture.finalText = ""; meetingCapture.interimText = ""; meetingCapture.startedAt = Date.now();
+    const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    meetingCapture.active = true;
+    if (Recognition) {
+      const recognition = new Recognition();
+      recognition.lang = "ko-KR"; recognition.continuous = true; recognition.interimResults = true;
+      recognition.onresult = (event) => {
+        let finalPart = "", interimPart = "";
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const phrase = event.results[i][0]?.transcript || "";
+          if (event.results[i].isFinal) finalPart += phrase + " "; else interimPart += phrase;
+        }
+        if (finalPart) meetingCapture.finalText += finalPart;
+        meetingCapture.interimText = interimPart;
+      };
+      recognition.onerror = (event) => { if (event.error !== "no-speech" && event.error !== "aborted") console.warn("speech recognition", event.error); };
+      recognition.onend = () => { if (meetingCapture.active) { try { recognition.start(); } catch (_) {} } };
+      recognition.start(); meetingCapture.recognition = recognition;
+    }
+    setRecordUI(true);
+    toast(Recognition ? "🎙️ 녹음을 시작했어요. 말한 내용은 종료 시 팀 지식으로 반영됩니다." : "🎙️ 녹음은 시작됐지만 이 브라우저는 자동 전사를 지원하지 않아요.");
+  } catch (err) { toast("마이크를 시작하지 못했어요: " + (err.message || err)); }
+}
+
+async function stopMeetingCapture() {
+  if (!meetingCapture.active) return;
+  meetingCapture.active = false; setRecordUI(false);
+  try { meetingCapture.recognition?.stop(); } catch (_) {}
+  meetingCapture.stream?.getTracks().forEach((track) => track.stop());
+  meetingCapture.stream = null; meetingCapture.recognition = null;
+  // 브라우저가 마지막 결과를 반영할 여지를 짧게 둔 뒤, 사용자가 수정 가능한 확인 화면을 연다.
+  setTimeout(() => {
+    const text = liveTranscript();
+    openTranscriptReview(text, text ? "AI가 원문을 회의 기록 초안으로 다듬었습니다. 승인하면 곧바로 이 채널의 팀 지식이 됩니다." : "자동 전사가 비어 있어요. 회의 메모를 붙여 넣으면 같은 형식으로 다듬어 반영합니다.");
+  }, 500);
+}
+
+$("record-btn").onclick = () => meetingCapture.active ? stopMeetingCapture() : startMeetingCapture();
+window.addEventListener("beforeunload", () => {
+  try { meetingCapture.recognition?.stop(); } catch (_) {}
+  meetingCapture.stream?.getTracks().forEach((track) => track.stop());
+});
+
 // 📎 이미지 첨부 — 클라이언트에서 압축(최대 800px JPEG) 후 인라인 저장 (Storage 없이, 데모용)
 async function compressImage(file) {
   const bmp = await createImageBitmap(file);
@@ -1193,7 +1377,44 @@ async function compressImage(file) {
   if (url.length > 700000) throw new Error("이미지가 너무 커요. 더 작은 이미지로 시도해 주세요.");
   return url;
 }
-$("attach-btn").onclick = () => { if (!state.currentChId) { toast("먼저 채널을 선택하세요."); return; } $("attach-input").click(); };
+let pendingImageMode = "original";
+function openImageModeModal() {
+  if (!state.currentChId) { toast("먼저 채널을 선택하세요."); return; }
+  openModal(`<h3>🖼️ 이미지를 어떻게 남길까요?</h3>
+    <p class="sub">AI가 임의로 꾸미지 않습니다. 원본을 공유하거나, 팀이 읽기 좋은 구조화 카드로 직접 정리할 수 있어요.</p>
+    <div class="modal-actions" style="justify-content:stretch;flex-direction:column;align-items:stretch">
+      <button class="btn" id="img-original">원본 공유 · 확대해서 보기</button>
+      <button class="btn btn-primary" id="img-structured">구조화 카드 · 내용/결정/다음 행동</button>
+    </div>`);
+  $("img-original").onclick = () => { pendingImageMode = "original"; closeModal(); $("attach-input").click(); };
+  $("img-structured").onclick = () => { pendingImageMode = "structured"; closeModal(); $("attach-input").click(); };
+}
+function openImageStructureModal(url, fileName) {
+  openModal(`<h3>🖼️ 이미지 기록 카드</h3>
+    <p class="sub">이미지를 근거로 무엇을 읽었는지 사람이 확인해 남깁니다. 이 카드 자체를 스크린샷해 공유할 수 있어요.</p>
+    <img class="msg-img" src="${esc(url)}" alt="선택한 이미지" />
+    <div class="field"><input id="img-card-title" maxlength="80" placeholder="제목 (예: 회의 화이트보드)" value="${esc(fileName.replace(/\.[^.]+$/, ""))}" /></div>
+    <div class="field"><textarea id="img-card-content" rows="3" placeholder="이미지에서 확인한 내용"></textarea></div>
+    <div class="field"><textarea id="img-card-decision" rows="2" placeholder="결정 또는 근거 (없으면 비워두세요)"></textarea></div>
+    <div class="field"><textarea id="img-card-action" rows="2" placeholder="다음 행동 · 담당자 · 기한 (없으면 비워두세요)"></textarea></div>
+    <div class="modal-actions"><button class="btn" id="img-card-cancel">취소</button><button class="btn btn-primary" id="img-card-save">카드로 저장</button></div>`);
+  $("img-card-cancel").onclick = closeModal;
+  $("img-card-save").onclick = async () => {
+    const title = $("img-card-title").value.trim() || "이미지 기록";
+    const detail = $("img-card-content").value.trim();
+    const decision = $("img-card-decision").value.trim();
+    const action = $("img-card-action").value.trim();
+    if (!detail) { toast("이미지에서 확인한 내용을 적어 주세요."); return; }
+    const text = [`🖼️ ${title}`, `내용: ${detail}`, decision && `결정·근거: ${decision}`, action && `다음 행동: ${action}`].filter(Boolean).join("\n");
+    const btn = $("img-card-save"); btn.disabled = true; btn.textContent = "저장 중…";
+    try {
+      const ref = await store.sendMessage(state.currentWsId, state.currentChId, { senderId: state.user.uid, senderType: "user", senderName: meName(), content: text, image: url, imageCard: { title, detail, decision, action } });
+      await store.addKnowledge(state.currentWsId, { content: text, promoted: true, sourceChannelId: state.currentChId, sourceMessageId: ref.id, learnedFrom: "이미지 기록 카드", promotedBy: state.user.uid });
+      closeModal(); toast("🖼️ 이미지 기록 카드와 팀 지식을 저장했어요.");
+    } catch (err) { btn.disabled = false; btn.textContent = "카드로 저장"; toast("이미지 카드 저장 실패: " + (err.message || err)); }
+  };
+}
+$("attach-btn").onclick = openImageModeModal;
 $("attach-input").addEventListener("change", async (e) => {
   const file = e.target.files && e.target.files[0];
   e.target.value = "";
@@ -1201,8 +1422,9 @@ $("attach-input").addEventListener("change", async (e) => {
   toast("🖼️ 이미지를 압축해서 보내는 중…");
   try {
     const url = await compressImage(file);
-    await store.sendMessage(state.currentWsId, state.currentChId, {
-      senderId: state.user.uid, senderType: "user", senderName: meName(), content: "", image: url,
+    if (pendingImageMode === "structured") openImageStructureModal(url, file.name);
+    else await store.sendMessage(state.currentWsId, state.currentChId, {
+      senderId: state.user.uid, senderType: "user", senderName: meName(), content: `🖼️ 원본 이미지 · ${file.name}`, image: url,
     });
   } catch (err) { toast(err.message || "이미지 전송 실패"); }
 });
@@ -1241,6 +1463,83 @@ $("composer").addEventListener("submit", async (e) => {
 });
 
 // ======================= 슬래시 명령어 =======================
+// ⚡ Building Day 최소 버전 — 현재 채널의 맥락으로 Plan → Action → Judge를 한 번에 남긴다.
+const BUILDING_DAY_MS = 24 * 60 * 60 * 1000;
+const buildingDayState = { sessionId: "", goal: "", doneCriteria: "", constraints: "", plan: null, actions: [], budgetUsed: 0, budgetLimit: 3, boostTier: "standard", phase: "idle", startedAt: null, expiresAt: null };
+function persistBuildingDaySession() {
+  try { localStorage.setItem("agentroom_building_day_v1", JSON.stringify({ ...buildingDayState, actions: buildingDayState.actions.slice(-30) })); } catch (_) {}
+}
+
+async function openVisualBrief() {
+  if (!state.currentChId) { toast("먼저 채널을 선택하세요."); return; }
+  openModal(`<h3>🖼️ 시각 브리프 생성 중…</h3><p class="sub">최근 대화와 팀 지식에서 결정·근거·다음 행동만 골라 16:9 카드로 배치합니다.</p>`);
+  const recent = state.messages.filter((m) => m.senderType !== "system").slice(-18).map((m) => `${m.senderName}: ${m.content}`).join("\n");
+  const knowledge = (state.memories || []).slice(0, 8).map((m) => m.content || "").join("\n");
+  const data = await ai.structuredCard(`팀 협업 채널 내용을 16:9 시각 브리프로 정리하라. 원문에 없는 사실은 만들지 말라. 제목은 24자 이내. section은 정확히 "한 줄 결론","근거","다음 행동","확인 필요" 4개, 각 items 1~3개. 문장을 짧게 써서 카드에 들어가게 하라.\n최근 대화:\n${recent || "없음"}\n팀 지식:\n${knowledge || "없음"}`);
+  const brief = data || { title: "팀 협업 브리프", sections: [{ heading: "한 줄 결론", items: ["아직 정리할 결정이 없습니다."] }, { heading: "근거", items: ["현재 채널의 대화와 팀 지식을 확인하세요."] }, { heading: "다음 행동", items: ["팀이 다음 행동을 직접 입력하세요."] }, { heading: "확인 필요", items: ["결정 전 사실과 담당자를 확인하세요."] }] };
+  const sections = brief.sections || [];
+  openModal(`<div class="visual-brief" id="visual-brief-card"><div class="visual-brief-kicker">AGENTROOM · TEAM CONTEXT</div><h2>${esc(brief.title || "팀 협업 브리프")}</h2><div class="visual-brief-grid">${sections.map((s) => `<section><h4>${esc(s.heading)}</h4><ul>${(s.items || []).map((x) => `<li>${esc(x)}</li>`).join("")}</ul></section>`).join("")}</div><div class="visual-brief-foot">근거: 현재 채널 대화·팀 지식 · 사람이 확인한 뒤 공유하세요.</div></div><div class="modal-actions"><button class="btn" id="vb-close">닫기</button><button class="btn" id="vb-print">스크린샷/인쇄</button><button class="btn btn-primary" id="vb-save">채널에 저장</button></div>`);
+  $("vb-close").onclick = closeModal;
+  $("vb-print").onclick = () => window.print();
+  $("vb-save").onclick = async () => { await store.addDocCard(state.currentWsId, state.currentChId, { emoji: "🖼️", title: brief.title || "팀 협업 브리프", sections }); closeModal(); toast("🖼️ 시각 브리프를 채널에 저장했어요."); };
+}
+
+function buildingSectionsText(data) {
+  return (data?.sections || []).map((s) => `## ${s.heading}\n${(s.items || []).map((x) => `- ${x}`).join("\n")}`).join("\n\n");
+}
+
+function openBuildingDay() {
+  if (!state.currentChId) { toast("먼저 채널을 선택하세요."); return; }
+  openModal(`<h3>⚡ Building Day 시작</h3>
+    <p class="sub">오늘 하루의 목표를 Plan → Action → Judge로 남깁니다. AI 호출은 기본 3회로 제한합니다.</p>
+    <div class="field"><label>오늘 목표</label><input id="bd-goal" maxlength="160" placeholder="예: 신규 사용자 5명에게 첫 사용 테스트" /></div>
+    <div class="field"><label>완료 조건</label><input id="bd-done" maxlength="180" placeholder="검수 가능한 문장으로 적어주세요" /></div>
+    <div class="field"><label>제약·참고</label><textarea id="bd-constraints" rows="3" maxlength="600" placeholder="시간, 예산, 반드시 지킬 조건"></textarea></div>
+    <div class="modal-actions"><button class="btn" id="bd-cancel">취소</button><button class="btn btn-primary" id="bd-plan">Plan 만들기 · 1/3</button></div>`);
+  $("bd-cancel").onclick = closeModal;
+  $("bd-plan").onclick = async () => {
+    const goal = $("bd-goal").value.trim(), done = $("bd-done").value.trim(), constraints = $("bd-constraints").value.trim();
+    if (!goal || !done) { toast("목표와 완료 조건을 적어 주세요."); return; }
+    const btn = $("bd-plan"); btn.disabled = true; btn.textContent = "Plan 생성 중…";
+    const context = (state.memories || []).slice(0, 5).map((m) => m.content || "").join("\n");
+    const data = await ai.structuredCard(`Building Day의 Plan을 작성하라. 목표: ${goal}\n완료 조건: ${done}\n제약: ${constraints || "없음"}\n참고 팀 지식: ${context || "없음"}\nsection은 정확히 "가설","실행할 일","리스크와 검증 기준" 3개, 각 items 2~5개. 실행할 일에는 담당/순서를 포함하라.`);
+    const plan = data || { title: `Building Day · ${goal}`, sections: [{ heading: "가설", items: [goal] }, { heading: "실행할 일", items: ["첫 사용자를 만나 관찰 기록", "결과를 팀 채널에 공유"] }, { heading: "리스크와 검증 기준", items: [done] }] };
+    const startedAt = Date.now();
+    buildingDayState.sessionId = `bd_${startedAt}_${Math.random().toString(36).slice(2, 8)}`;
+    buildingDayState.goal = goal; buildingDayState.doneCriteria = done; buildingDayState.constraints = constraints; buildingDayState.plan = plan; buildingDayState.actions = []; buildingDayState.budgetUsed = 1; buildingDayState.boostTier = "standard"; buildingDayState.phase = "plan"; buildingDayState.startedAt = startedAt; buildingDayState.expiresAt = startedAt + BUILDING_DAY_MS; persistBuildingDaySession();
+    try { await store.addDocCard(state.currentWsId, state.currentChId, { emoji: "⚡", title: plan.title || `Building Day · ${goal}`, sections: plan.sections }); } catch (_) {}
+    buildingDayState.phase = "action"; persistBuildingDaySession(); openBuildingDayActions();
+  };
+}
+
+function openBuildingDayActions() {
+  const actionList = buildingDayState.actions.map((a, i) => `<li><b>${i + 1}.</b> ${esc(a.text)}${a.evidence ? `<small> · 근거: ${esc(a.evidence)}</small>` : ""}</li>`).join("") || "<li class=\"mem-empty\">아직 기록된 Action이 없어요.</li>";
+  openModal(`<h3>⚡ Building Day · Action</h3><p class="sub">계획을 보며 사람이 직접 실행한 일을 기록합니다. Action 단계에서는 AI를 호출하지 않습니다. (${buildingDayState.budgetUsed}/3)</p>
+    <div class="record-transcript">${esc(buildingSectionsText(buildingDayState.plan))}</div>
+    <div class="field"><input id="bd-action-text" maxlength="240" placeholder="완료한 일 또는 시도한 일" /></div>
+    <div class="field"><input id="bd-action-evidence" maxlength="240" placeholder="근거 링크·관찰 메모 (선택)" /></div>
+    <button class="btn" id="bd-add-action">Action 기록</button><ul id="bd-action-list" class="mem-list">${actionList}</ul>
+    <div class="modal-actions"><button class="btn" id="bd-close">닫기</button><button class="btn btn-primary" id="bd-judge">Judge 만들기 · 2/3</button></div>`);
+  $("bd-close").onclick = closeModal;
+  $("bd-add-action").onclick = () => { const text = $("bd-action-text").value.trim(); if (!text) return; buildingDayState.actions.push({ text, evidence: $("bd-action-evidence").value.trim() }); buildingDayState.phase = "action"; persistBuildingDaySession(); $("bd-action-text").value = ""; $("bd-action-evidence").value = ""; openBuildingDayActions(); };
+  $("bd-judge").onclick = async () => {
+    if (!buildingDayState.actions.length) { toast("Action을 하나 이상 기록해 주세요."); return; }
+    if (buildingDayState.budgetUsed >= buildingDayState.budgetLimit) { toast("이번 세션 AI 예산을 모두 사용했어요."); return; }
+    const btn = $("bd-judge"); btn.disabled = true; btn.textContent = "Judge 생성 중…";
+    const actions = buildingDayState.actions.map((a) => `${a.text} (근거: ${a.evidence || "없음"})`).join("\n");
+    const judge = await ai.structuredCard(`Building Day Judge를 작성하라. 완료 조건: ${buildingDayState.doneCriteria}\n실행 기록:\n${actions}\nsection은 정확히 "판정","근거","다음 한 가지 행동" 3개, 각 items 1~4개. 증거가 부족하면 미충족/확인 필요라고 써라.`) || { title: "Building Day Judge", sections: [{ heading: "판정", items: ["사람의 확인이 필요합니다."] }, { heading: "근거", items: buildingDayState.actions.map((a) => a.text) }, { heading: "다음 한 가지 행동", items: [buildingDayState.doneCriteria] }] };
+    buildingDayState.budgetUsed = 2; buildingDayState.phase = "judge"; persistBuildingDaySession();
+    try {
+      await store.addDocCard(state.currentWsId, state.currentChId, { emoji: "⚖️", title: judge.title || "Building Day Judge", sections: judge.sections });
+      await store.addKnowledge(state.currentWsId, { content: `Building Day Judge\n${buildingSectionsText(judge)}`, promoted: true, sourceChannelId: state.currentChId, learnedFrom: "Building Day 승인 결과", promotedBy: state.user.uid });
+      closeModal(); toast("⚖️ Judge 결과를 채널과 팀 지식에 반영했어요.");
+    } catch (err) { btn.disabled = false; btn.textContent = "Judge 만들기 · 2/3"; toast("Judge 저장 실패: " + (err.message || err)); }
+  };
+}
+
+$("building-day-btn").addEventListener("click", openBuildingDay);
+$("visual-brief-btn").addEventListener("click", openVisualBrief);
+
 // 이름은 영어 기준(영어 사용자 배려), 한국어/약어는 alias로 지원.
 const COMMANDS = [
   { name: "help", aliases: ["도움", "도움말", "명령어", "commands", "cmds", "?"], usage: "/help", desc: "command list · 명령어 목록", run: () => { openHelpModal(); } },
@@ -1266,6 +1565,8 @@ const COMMANDS = [
   { name: "export", aliases: ["내보내기", "저장", "download", "dl"], usage: "/export [md|html|json|csv|txt]", desc: "channel to file · 대화·산출물 내보내기", run: (a) => { const k = (a || "").trim().toLowerCase(); if (exporter.FORMATS[k]) doExport(k); else openExportModal(); } },
   // 신뢰 지표 (AI 불필요 — 계측 로그 집계)
   { name: "metrics", aliases: ["지표", "품질", "stats"], usage: "/metrics", desc: "quality metrics · 최근 7일 에이전트 신뢰 지표", run: runMetricsCard },
+  { name: "buildday", aliases: ["빌딩데이", "building", "sprint"], usage: "/buildday", desc: "Plan → Action → Judge · 집중 작업 세션", run: openBuildingDay },
+  { name: "brief", aliases: ["시각브리프", "visualbrief", "onepager"], usage: "/brief", desc: "16:9 visual brief · 팀 지식 시각화", run: openVisualBrief },
   // 카톡 백필 — 과거 대화를 팀 지식으로
   { name: "import", aliases: ["백필", "카톡", "kakao", "가져오기"], usage: "/import", desc: "KakaoTalk backfill · 카톡 내보내기(.txt)를 팀 지식으로", run: openImportModal },
 ];

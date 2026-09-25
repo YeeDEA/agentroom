@@ -270,6 +270,33 @@ ${convo}`);
   }
 }
 
+// 회의 전사문은 원문을 요약으로 대체하지 않는다. 읽기 쉬운 구조로만 재배열하고,
+// 확정되지 않은 내용은 '미결'로 남겨 사람이 고치고 승인할 수 있게 한다.
+export async function refineTranscript(transcript) {
+  const raw = String(transcript || "").trim().slice(0, 7800);
+  if (!raw) return null;
+  try {
+    const text = await callLLM(
+`아래는 한 팀의 회의 전사문이다. 사실을 지어내거나 확정되지 않은 내용을 결정으로 바꾸지 말고, 읽기 좋은 회의록 초안으로 재구성하라.
+- 발화의 의미를 보존한다. 모호하면 '확인 필요'로 둔다.
+- 결정, 담당자, 기한이 명시된 경우에만 분리한다.
+- 각 배열은 최대 6개, 항목은 짧고 구체적으로 쓴다.
+- STRICT JSON만 출력한다.
+{"title":"회의 제목(없으면 회의 기록)","summary":["핵심 논의"],"decisions":["확정된 결정"],"actions":["담당자·기한이 있으면 포함"],"openIssues":["미결·확인 필요"],"cleanTranscript":"문단으로 다듬은 전사문"}
+
+[원문 전사]
+${raw}`);
+    const p = parseJson(text);
+    if (!p) return null;
+    const list = (v, max = 6) => Array.isArray(v) ? v.map((x) => String(x).trim()).filter(Boolean).slice(0, max) : [];
+    return {
+      title: String(p.title || "회의 기록").slice(0, 80),
+      summary: list(p.summary), decisions: list(p.decisions), actions: list(p.actions), openIssues: list(p.openIssues),
+      cleanTranscript: String(p.cleanTranscript || raw).trim().slice(0, 7000),
+    };
+  } catch (_) { return null; }
+}
+
 /**
  * 시각화: 주제/대화를 mermaid 다이어그램으로.
  * @returns {Promise<{title:string, code:string}|null>}

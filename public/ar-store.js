@@ -267,6 +267,7 @@ export async function sendMessage(wsId, chId, msg) {
     reactions: 0,
     agentId: msg.agentId || null,
     ...(msg.image ? { image: msg.image } : {}),
+    ...(msg.imageCard ? { imageCard: msg.imageCard } : {}),
     ...(msg.sources && msg.sources.length ? { sources: msg.sources.slice(0, 3) } : {}),
     ...(msg.sourceKids && msg.sourceKids.length ? { sourceKids: msg.sourceKids.slice(0, 3) } : {}),
     ...(msg.hibernated ? { hibernated: msg.hibernated } : {}),

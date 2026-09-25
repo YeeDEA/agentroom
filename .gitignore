@@ -15,3 +15,11 @@ node_modules/
 
 # 다른 프로젝트 문서 (팀원 실명·전략 포함, 공개 제외)
 AGENT24_*.md
+
+# 로컬 산출물 (영상·스크린샷·IR 덱·PDF 빌드) — 용량 크고 공개 불필요
+output/
+tmp/
+
+# 로컬 스크립트·작업 파일
+edit_poster.ps1
+core-member-recruitment-edited.png
